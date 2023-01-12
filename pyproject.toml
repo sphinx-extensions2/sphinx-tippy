@@ -1,0 +1,43 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "sphinx_tippy"
+authors = [{name = "Chris Sewell", email = "chrisj_sewell@hotmail.com"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Sphinx :: Extension",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["sphinx", "tooltip", "tippy"]
+dynamic = ["version", "description"]
+requires-python = ">=3.8"
+dependencies = [
+    "sphinx>4",
+    "beautifulsoup4",
+]
+
+[project.urls]
+Home = "https://github.com/chrisjsewell/sphinx_tippy"
+Documentation = "https://sphinx-tippy.readthedocs.io"
+
+[project.optional-dependencies]
+testing = [
+    "pytest",
+    "sphinx-pytest",
+]
+docs = [
+    "myst-parser",
+    "furo",
+]
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 100
