@@ -4,7 +4,7 @@ from sphinx_tippy import __version__
 
 # -- Project information -----------------------------------------------------
 
-project = "Sphinx PyScript"
+project = "Sphinx Tippy"
 version = __version__
 copyright = f"{date.today().year}, Chris Sewell"
 author = "Chris Sewell"

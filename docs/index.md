@@ -53,6 +53,11 @@ This is a method
 ```
 ````
 
+```{math}
+:label: eq1
+a = 1
+```
+
 {ref}`hallo`
 
 {ref}`xxx`
@@ -66,6 +71,12 @@ This is a method
 {ref}`other`
 
 {ref}`usage/xx`
+
+{doc}`folder/other`
+
+{doc}`../index`
+
+{eq}`eq1`
 
 ## Configuration
 
