@@ -7,8 +7,6 @@ index:
   id_to_html:
     null: '<h1 class="tippy-header" style="margin-top: 0;">Test<a class="headerlink"
       href="#test" title="Permalink to this heading">¶</a></h1><p>...</p>'
-    test: '<h1 class="tippy-header" style="margin-top: 0;">Test<a class="headerlink"
-      href="#test" title="Permalink to this heading">¶</a></h1><p>...</p>'
     whatever: '<figure class="align-default" id="whatever">
 
       <img alt="_images/hallo.png" src="_images/hallo.png"/>
@@ -21,6 +19,8 @@ index:
       </figcaption>
 
       </figure>'
+    test: '<h1 class="tippy-header" style="margin-top: 0;">Test<a class="headerlink"
+      href="#test" title="Permalink to this heading">¶</a></h1><p>...</p>'
   refs_in_page: !!set
     ? - null
       - test

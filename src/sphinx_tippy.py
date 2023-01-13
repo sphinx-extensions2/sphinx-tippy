@@ -11,6 +11,9 @@ from typing import Any, Dict, TypedDict, cast
 from bs4 import BeautifulSoup, NavigableString, Tag
 from docutils import nodes
 from sphinx.application import Sphinx
+from sphinx.config import Config
+from sphinx.domains.math import MathDomain
+from sphinx.errors import ExtensionError
 from sphinx.util.logging import getLogger
 
 __version__ = "0.1.0"
@@ -18,7 +21,12 @@ __version__ = "0.1.0"
 
 def setup(app: Sphinx):
     """Setup the extension"""
-    app.add_config_value("tippy_custom_tips", {}, "html")
+    app.add_config_value("tippy_custom_tips", {}, "html", Dict[str, str])
+    app.add_config_value(
+        "tippy_tip_selector",
+        "figure, table, img, p, aside, div.admonition, div.literal-block-wrapper",
+        "html",
+    )
     app.add_config_value(
         "tippy_skip_anchor_classes",
         (
@@ -28,18 +36,30 @@ def setup(app: Sphinx):
         "html",
     )
     app.add_config_value("tippy_anchor_parent_selector", "", "html")
-    app.add_config_value("tippy_enable_mathjax", True, "html")
+    app.add_config_value("tippy_enable_mathjax", False, "html")
     app.add_config_value(
         "tippy_js",
         ("https://unpkg.com/@popperjs/core@2", "https://unpkg.com/tippy.js@6"),
         "html",
     )
-    app.connect("html-page-context", collect_tips)
+    app.connect("builder-inited", validate_config)
+    app.connect("html-page-context", collect_tips, priority=450)  # before mathjax
     app.connect("build-finished", write_tippy_js)
     return {"version": __version__, "parallel_read_safe": True}
 
 
 LOGGER = getLogger(__name__)
+
+
+def validate_config(app: Sphinx):
+    """Validate the config"""
+    if app.builder.name != "html":
+        return
+    if (
+        app.config.tippy_enable_mathjax
+        and app.builder.math_renderer_name != "mathjax"  # type: ignore[attr-defined]
+    ):
+        raise ExtensionError("tippy_enable_mathjax=True requires mathjax to be enabled")
 
 
 class TippyData(TypedDict):
@@ -64,6 +84,11 @@ def collect_tips(
 
     page_parent = posixpath.dirname(pagename)
     custom_tips = app.config.tippy_custom_tips
+
+    if app.config.tippy_enable_mathjax:
+        # TODO ideally we would only run this on pages that have math in the tips
+        domain = cast(MathDomain, app.env.get_domain("math"))
+        domain.data["has_equations"][pagename] = True
 
     element_id_map = create_element_id_map(doctree)
 
@@ -107,7 +132,7 @@ def collect_tips(
             if other_pagename in app.env.all_docs:
                 refs_in_page.add((other_pagename, target))
 
-    id_to_tip_html = create_id_to_tip_html(body)
+    id_to_tip_html = create_id_to_tip_html(app.config, body)
 
     # store the data for later use
     if not hasattr(app.env, "tippy_data"):
@@ -148,7 +173,7 @@ def create_element_id_map(doctree: nodes.document) -> dict[str, str]:
     return id_map
 
 
-def create_id_to_tip_html(body: BeautifulSoup) -> dict[str | None, str]:
+def create_id_to_tip_html(config: Config, body: BeautifulSoup) -> dict[str | None, str]:
     """Create a mapping of ids to the HTML to show in the tooltip."""
     id_to_html: dict[str | None, str] = {}
 
@@ -157,35 +182,48 @@ def create_id_to_tip_html(body: BeautifulSoup) -> dict[str | None, str]:
         id_to_html[None] = _get_header_html(title) + "<p>...</p>"
 
     tag: Tag
-    for tag in body.find_all(id=True):
-        if tag.name in {"figure", "table", "img", "p", "aside"}:
-            # copy the whole HTML
+
+    # these are tags where we simply copy the whole HTML
+    for tag in body.select(config.tippy_tip_selector):
+        if "id" in tag.attrs:
             id_to_html[str(tag["id"])] = str(tag)
-        elif tag.name == "dt":
+
+    # these are tags where we copy the HTML in a bespoke way
+    for tag in body.find_all(id=True):
+
+        if tag.name == "dt":
             # copy the whole HTML
             id_to_html[str(tag["id"])] = str(tag)
             # if the next tag is a dd, copy that too
             if (next_sibling := next_sibling_tag(tag)) and next_sibling.name == "dd":
-                # only copy the first n paragraphs
-                for num, next_next in enumerate(
-                    si for si in next_sibling.next_elements if isinstance(si, Tag)
-                ):
-                    if num > 10 or next_next.name != "p":
-                        break
-                    id_to_html[str(tag["id"])] += str(next_next)
+                copy_dd = next_sibling.__copy__()
+                # limit the children to certain numbers and types
+                child_count = 0
+                for child in list(copy_dd.children):
+                    if not isinstance(child, Tag):
+                        child.extract()
+                    elif child_count > 5 or child.name != "p":
+                        child.decompose()
+                    else:
+                        child_count += 1
+
+                id_to_html[str(tag["id"])] += str(copy_dd)
+
         elif tag.name == "section" and (
             header := tag.find(["h1", "h2", "h3", "h4", "h5", "h6"])
         ):
             id_to_html[str(tag["id"])] = _get_header_html(header) + "<p>...</p>"
+
         elif tag.name == "div" and "math-wrapper" in (tag.get("class") or []):
             # remove an span with eqno class, since it is not needed
             # and it can cause issues with the tooltip
             # (e.g. if the span is the last element in the div)
             tag_copy = tag.__copy__()
             for child in tag_copy.find_all("span"):
-                if "eqno" in (child.get("class") or []):
+                if isinstance(child, Tag) and "eqno" in (child.get("class") or []):
                     child.decompose()
             id_to_html[str(tag["id"])] = str(tag_copy)
+
     return id_to_html
 
 
@@ -194,14 +232,6 @@ def next_sibling_tag(tag: Tag) -> Tag | None:
     for sibling in tag.next_siblings:
         if isinstance(sibling, Tag):
             return sibling
-    return None
-
-
-def next_child_tag(tag: Tag) -> Tag | None:
-    """Get the next tag."""
-    for child in tag.next_elements:
-        if isinstance(child, Tag):
-            return child
     return None
 
 
@@ -255,6 +285,8 @@ def write_tippy_js(app: Sphinx, exception: Any):
     """
     if exception:
         return
+    if app.builder.format != "html":
+        return
 
     tippy_data = cast(Dict[str, TippyData], getattr(app.env, "tippy_data", {}))
     pselector = app.config.tippy_anchor_parent_selector
@@ -278,7 +310,12 @@ def write_tippy_js(app: Sphinx, exception: Any):
                     refs_to_html[f"{relpage}.html"] = rewrite_local_attrs(
                         tippy_data[refpage]["id_to_html"][None], relfolder
                     )
-                elif target and target in tippy_data[refpage]["element_id_map"]:
+                elif (
+                    target
+                    and target in tippy_data[refpage]["element_id_map"]
+                    and tippy_data[refpage]["element_id_map"][target]
+                    in tippy_data[refpage]["id_to_html"]
+                ):
                     html_str = tippy_data[refpage]["id_to_html"][
                         tippy_data[refpage]["element_id_map"][target]
                     ]
@@ -295,8 +332,11 @@ def write_tippy_js(app: Sphinx, exception: Any):
                 "{MathJax.typesetPromise([instance.popper]).then(() => {});},"
             )
             if app.config.tippy_enable_mathjax
+            and app.builder.math_renderer_name == "mathjax"  # type: ignore[attr-defined]
             else ""
         )
+        # TODO need to only enable when math,
+        # and then need to ensure sphinx adds mathjax to the page
 
         content = (
             dedent(

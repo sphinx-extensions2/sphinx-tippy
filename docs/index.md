@@ -1,10 +1,11 @@
-# Sphinx PyScript
+# Sphinx Tippy
 
-Get rich tool tips in your sphinx documentation!
+Get rich hover tips in your sphinx documentation.
 
-Using <https://atomiks.github.io/tippyjs>
+[**Hover on me!**](https://atomiks.github.io/tippyjs)
 
 ```{toctree}
+:hidden:
 folder/other
 ```
 
@@ -16,78 +17,117 @@ Install with pip:
 pip install sphinx-tippy
 ```
 
-(usage/xx)=
+(intro/usage)=
 ## Usage
 
 Add the extension to your `conf.py`:
 
 ```python
-extensions = [
-    "sphinx_tippy",
-]
+extensions = ["sphinx_tippy"]
 ```
 
-[custom tip](https://example.com)
+Now your website will have tooltips on many of your internal links!
 
-(xxx)=
-```{figure} https://via.placeholder.com/150
-:name: hallo
-Caption
-```
+:::{list-table}
 
-```{table} Table caption
-:name: table
+-  - [Custom tip](https://example.com)
 
- a  |  b
---- | ---
-c   | d
-```
+-  - {ref}`Figure reference with URL image <figure-name-url>`
 
-```{image} fun-fish.png
-:width: 1000px
-:name: fun-fish
-```
+-  - {ref}`Figure reference with local image <figure-name-file>`
 
-````{py:class} Foo
-This is a class
+-  - {ref}`Figure reference by another id <figure-name-dup>`
 
-It has a docstring
-```{py:method} bar(variable: str) -> int
-This is a method
-```
-````
+-  - {ref}`Image reference <image-name>`
 
-```{math}
-:label: eq1
-a = 1
-```
+-  - {py:class}`Python Class reference <Foo>`
 
-{ref}`hallo`
+-  - {ref}`Table reference <table-name>`
 
-{ref}`xxx`
+-  - {ref}`Heading reference <intro/usage>`
 
-{ref}`yep <fun-fish>`
+-  - {doc}`Document reference <folder/other>`
 
-{py:class}`Foo`
+-  - {doc}`Same document reference <../index>`
 
-{ref}`table`
+-  - Math reference {eq}`math-name`
 
-{ref}`other`
+-  - {ref}`Code reference <code-name>`
 
-{ref}`usage/xx`
+-  - {ref}`Admonition reference <admonition-name>`
 
-{doc}`folder/other`
+-  - {term}`Glossary reference <term>`
 
-{doc}`../index`
+-  - Footnote reference [^1]
 
-{eq}`eq1`
+:::
 
-{confval}`name`
+[^1]: This is a footnote
+
+    This is another paragraph
 
 ## Configuration
 
 The extension has the following configuration options:
 
-```{confval} name
-something
+:::{confval} tippy_custom_tips
+A dictionary, mapping URLs to HTML strings, which will be used to create custom tips.
+
+For example, to add a tip for the URL `https://example.com`:
+
+```python
+tippy_custom_tips = {
+    "https://example.com": "<p>This is a custom tip!</p>"
+}
 ```
+
+:::
+
+:::{confval} tippy_tip_selector
+Define what elements tips are created for, by default:
+
+```python
+tippy_tip_selector = "figure, table, img, p, aside, div.admonition, div.literal-block-wrapper"
+```
+
+:::
+
+:::{confval} tippy_skip_anchor_classes
+Skip creating tooltips for anchors with these classes, by default:
+
+```python
+tippy_skip_anchor_classes = (
+    "headerlink",
+    "sd-stretched-link",
+)
+```
+
+:::
+
+:::{confval} tippy_anchor_parent_selector
+Only create tool tips for anchors within this select, by default `""`, examples:
+
+```python
+# For Furo theme:
+tippy_anchor_parent_selector = "div.content"
+# For pydata theme:
+tippy_anchor_parent_selector = "article.bd-article"
+```
+
+:::
+
+:::{confval} tippy_enable_mathjax
+Whether to enable tooltips for math equations, by default `False`.
+
+Note, this requires the `sphinx.ext.mathjax` extension to be enabled.
+At present it will cause `mathjax` to be loaded on every page, even if it is not used.
+:::
+
+:::{confval} tippy_js
+The Javascript required to enable tooltips, by default:
+
+```python
+tippy_js = ("https://unpkg.com/@popperjs/core@2", "https://unpkg.com/tippy.js@6")
+```
+
+:::
