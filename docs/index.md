@@ -26,13 +26,15 @@ Add the extension to your `conf.py`:
 extensions = ["sphinx_tippy"]
 ```
 
-Now your website will have tooltips on many of your internal links!
+Now your website will have tooltips on many of your links!
 
 :::{list-table}
 
 -  - [Custom tip](https://example.com)
 
 -  - [Wikipedia tips](https://en.wikipedia.org/wiki/Tooltip)
+
+-  - [DOI tip](https://doi.org/10.1186/gm483)
 
 -  - {ref}`Figure reference with URL image <figure-name-url>`
 
@@ -133,6 +135,33 @@ tippy_anchor_parent_selector = "article.bd-article"
 
 :::{confval} tippy_enable_wikitips
 Enable tooltips for wikipedia links, starting `https://en.wikipedia.org/wiki/`, by default `True`.
+:::
+
+:::{confval} tippy_enable_doitips
+Enable tooltips for DOI links, starting `https://doi.org/`, by default `True`.
+:::
+
+:::{confval} tippy_doi_api
+The API to use for DOI tooltips, by default `https://api.crossref.org/works/`
+(another possibility is `https://api.datacite.org/dois/`)
+:::
+
+:::{confval} tippy_doi_template
+The [jinja template](https://jinja.palletsprojects.com) to use for formatting DOI data to tooltips, by default:
+
+```jinja
+{% set attrs = data.message %}
+<div>
+    <h3>{{ attrs.title[0] }}</h3>
+    {% if attrs.author is defined %}
+    <p><b>Authors:</b> {{ attrs.author | map_join('given', 'family') | join(', ')  }}</p>
+    {% endif %}
+    <p><b>Publisher:</b> {{ attrs.publisher }}</p>
+    <p><b>Published:</b> {{ attrs.created['date-parts'][0] | join('-') }}</p>
+</div>
+```
+
+(See <https://github.com/CrossRef/rest-api-doc/blob/master/api_format.md>)
 :::
 
 :::{confval} tippy_enable_mathjax

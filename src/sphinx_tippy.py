@@ -12,6 +12,7 @@ from typing import Any, Dict, TypedDict, cast
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 from docutils import nodes
+from jinja2 import Environment
 from sphinx.application import Sphinx
 from sphinx.domains.math import MathDomain
 from sphinx.errors import ExtensionError
@@ -23,7 +24,7 @@ try:
 except ImportError:
     from sphinx.util import status_iterator
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 def setup(app: Sphinx):
@@ -44,6 +45,26 @@ def setup(app: Sphinx):
     )
     app.add_config_value("tippy_anchor_parent_selector", "", "html")
     app.add_config_value("tippy_enable_wikitips", True, "html")
+    app.add_config_value("tippy_enable_doitips", True, "html")
+    app.add_config_value("tippy_doi_api", "https://api.crossref.org/works/", "html")
+    # see https://github.com/CrossRef/rest-api-doc/blob/master/api_format.md
+    # or for https://api.datacite.org/dois/
+    # see https://support.datacite.org/docs/api-get-doi
+    # and http://schema.datacite.org/meta/kernel-4.4/metadata.xsd
+    default_doi_template = dedent(
+        """\
+        {% set attrs = data.message %}
+        <div>
+            <h3>{{ attrs.title[0] }}</h3>
+            {% if attrs.author is defined %}
+            <p><b>Authors:</b> {{ attrs.author | map_join('given', 'family') | join(', ')  }}</p>
+            {% endif %}
+            <p><b>Publisher:</b> {{ attrs.publisher }}</p>
+            <p><b>Published:</b> {{ attrs.created['date-parts'][0] | join('-') }}</p>
+        </div>
+        """
+    )
+    app.add_config_value("tippy_doi_template", default_doi_template, "html")
     app.add_config_value("tippy_enable_mathjax", False, "html")
     app.add_config_value(
         "tippy_js",
@@ -67,6 +88,9 @@ class TippyConfig:
     anchor_parent_selector: str
     enable_wikitips: bool
     enable_mathjax: bool
+    enable_doitips: bool
+    doi_template: str
+    doi_api: str
     js_files: tuple[str, ...]
 
 
@@ -78,7 +102,10 @@ def get_tippy_config(app: Sphinx) -> TippyConfig:
         skip_anchor_classes=app.config.tippy_skip_anchor_classes,
         anchor_parent_selector=app.config.tippy_anchor_parent_selector,
         enable_wikitips=app.config.tippy_enable_wikitips,
+        enable_doitips=app.config.tippy_enable_doitips,
         enable_mathjax=app.config.tippy_enable_mathjax,
+        doi_template=app.config.tippy_doi_template,
+        doi_api=app.config.tippy_doi_api,
         js_files=app.config.tippy_js,
     )
 
@@ -104,6 +131,11 @@ class TippyPageData(TypedDict):
     id_to_html: dict[str | None, str]
     custom_in_page: set[str]
     wiki_titles: set[str]
+    dois: set[str]
+
+
+WIKI_PATH = "https://en.wikipedia.org/wiki/"
+DOI_PATH = "https://doi.org/"
 
 
 def get_tippy_data(app: Sphinx) -> TippyData:
@@ -145,6 +177,7 @@ def collect_tips(
     refs_in_page: set[tuple[None | str, str | None]] = set()
     custom_in_page: set[str] = set()
     wiki_titles: set[str] = set()
+    doi_names: set[str] = set()
     for anchor in body.find_all("a", {"href": True}):
 
         if not isinstance(anchor["href"], str):
@@ -170,10 +203,11 @@ def collect_tips(
         if not path:
             refs_in_page.add((None, target))
 
-        if tippy_config.enable_wikitips and path.startswith(
-            "https://en.wikipedia.org/wiki/"
-        ):
-            wiki_titles.add(path[30:])
+        if tippy_config.enable_wikitips and path.startswith(WIKI_PATH):
+            wiki_titles.add(path[len(WIKI_PATH) :])
+
+        if tippy_config.enable_doitips and path.startswith(DOI_PATH):
+            doi_names.add(path[len(DOI_PATH) :])
 
         # check if the reference is on another local page
         # TODO for now we assume that page names are written in posix style with ".html" prefixes
@@ -193,6 +227,7 @@ def collect_tips(
         "id_to_html": id_to_tip_html,
         "custom_in_page": custom_in_page,
         "wiki_titles": wiki_titles,
+        "dois": doi_names,
     }
 
     # add the JS files
@@ -351,18 +386,8 @@ def generate_wikipedia_tooltip(title: str) -> str:
     return extract_html
 
 
-def write_tippy_js(app: Sphinx, exception: Any):
-    """For each page, filter the list of reference tooltips to only those on the page,
-    and write the JS file.
-    """
-    if exception:
-        return
-    if app.builder.format != "html":
-        return
-
-    tippy_page_data = get_tippy_data(app)["pages"]
-
-    # fetch the wikipedia tooltips, caching them for rebuilds
+def fetch_wikipedia_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str]:
+    """fetch the wikipedia tooltips, caching them for rebuilds."""
     wiki_cache: dict[str, str]
     wiki_cache_path = Path(app.outdir, "tippy_wiki_cache.json")
     if wiki_cache_path.exists():
@@ -372,7 +397,7 @@ def write_tippy_js(app: Sphinx, exception: Any):
         wiki_cache = {}
     wiki_fetch = {
         title
-        for page in tippy_page_data.values()
+        for page in data.values()
         for title in page["wiki_titles"]
         if title not in wiki_cache
     }
@@ -389,33 +414,98 @@ def write_tippy_js(app: Sphinx, exception: Any):
             )
     with wiki_cache_path.open("w") as file:
         json.dump(wiki_cache, file)
+    return wiki_cache
+
+
+def map_join(
+    items: list[dict[str, Any]], *attributes: str, sep: str = " ", default: str = ""
+) -> list[str]:
+    """Jinja filter, to convert list of dicts to list of strings."""
+    return [sep.join([item.get(a, default) for a in attributes]) for item in items]
+
+
+def fetch_doi_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str]:
+    """fetch the doi tooltips, caching them for rebuilds."""
+    config = get_tippy_config(app)
+    doi_cache: dict[str, str]
+    doi_cache_path = Path(app.outdir, "tippy_doi_cache.json")
+    if doi_cache_path.exists():
+        with doi_cache_path.open("r") as file:
+            doi_cache = json.load(file)
+    else:
+        doi_cache = {}
+    doi_fetch = {
+        doi for page in data.values() for doi in page["dois"] if doi not in doi_cache
+    }
+    for doi in status_iterator(doi_fetch, "Fetching DOI tips", length=len(doi_fetch)):
+        url = f"{config.doi_api}{doi}"
+        try:
+            with urllib.request.urlopen(url) as response:
+                data = json.loads(response.read())
+        except Exception as exc:
+            LOGGER.warning(
+                f"Could not fetch DOI data for {doi}: {exc} [tippy.doi]",
+                type="tippy",
+                subtype="doi",
+            )
+        try:
+            env = Environment()
+            env.filters["map_join"] = map_join
+            template = env.from_string(config.doi_template)
+            doi_cache[doi] = template.render(data=data)
+        except Exception as exc:
+            LOGGER.warning(
+                f"Could not render DOI template for {doi}: {exc} [tippy.doi]",
+                type="tippy",
+                subtype="doi",
+            )
+    with doi_cache_path.open("w") as file:
+        json.dump(doi_cache, file)
+    return doi_cache
+
+
+def write_tippy_js(app: Sphinx, exception: Any):
+    """For each page, filter the list of reference tooltips to only those on the page,
+    and write the JS file.
+    """
+    if exception:
+        return
+    if app.builder.format != "html":
+        return
+
+    tippy_page_data = get_tippy_data(app)["pages"]
+
+    wiki_cache = fetch_wikipedia_tips(app, tippy_page_data)
+    doi_cache = fetch_doi_tips(app, tippy_page_data)
 
     for pagename in status_iterator(
         tippy_page_data, "Writing .tippy.js files", length=len(tippy_page_data)
     ):
-        write_tippy_js_page(app, pagename, wiki_cache)
+        write_tippy_js_page(app, pagename, wiki_cache, doi_cache)
 
 
-def write_tippy_js_page(app: Sphinx, pagename: str, wiki_cache: dict[str, str]):
-
+def write_tippy_js_page(
+    app: Sphinx, pagename: str, wiki_cache: dict[str, str], doi_cache: dict[str, str]
+):
+    """Write the JS file for a single page."""
     tippy_page_data = get_tippy_data(app)["pages"]
     tippy_config = get_tippy_config(app)
     data = tippy_page_data[pagename]
 
     local_id_map = data["element_id_map"]
     local_id_to_html = data["id_to_html"]
-    selector_to_html: dict[str, str] = {
-        f'a[href="{ref}"]': tippy_config.custom_tips[ref]
-        for ref in data["custom_in_page"]
-    }
+    selector_to_html: dict[str, str] = {}
     for wiki_title in data["wiki_titles"]:
         if wiki_title in wiki_cache:
-            selector_to_html[
-                f'a[href="https://en.wikipedia.org/wiki/{wiki_title}"]'
-            ] = wiki_cache[wiki_title]
-            selector_to_html[
-                f'a[href^="https://en.wikipedia.org/wiki/{wiki_title}#"]'
-            ] = wiki_cache[wiki_title]
+            selector_to_html[f'a[href="{WIKI_PATH}{wiki_title}"]'] = wiki_cache[
+                wiki_title
+            ]
+            selector_to_html[f'a[href^="{WIKI_PATH}{wiki_title}#"]'] = wiki_cache[
+                wiki_title
+            ]
+    for doi in data["dois"]:
+        if doi in doi_cache:
+            selector_to_html[f'a[href="{DOI_PATH}{doi}"]'] = doi_cache[doi]
     for refpage, target in data["refs_in_page"]:
 
         if refpage is not None:
@@ -446,6 +536,14 @@ def write_tippy_js_page(app: Sphinx, pagename: str, wiki_cache: dict[str, str]):
             selector_to_html[f'a[href="#{target}"]'] = local_id_to_html[
                 local_id_map[target]
             ]
+
+    # custom tips take priority over other tips
+    selector_to_html.update(
+        {
+            f'a[href="{ref}"]': tippy_config.custom_tips[ref]
+            for ref in data["custom_in_page"]
+        }
+    )
 
     pselector = tippy_config.anchor_parent_selector
     mathjax = (

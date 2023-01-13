@@ -1,6 +1,7 @@
 pages:
   index:
     custom_in_page: !!set {}
+    dois: !!set {}
     element_id_map:
       abc: test
       test: test
