@@ -1,4 +1,5 @@
 from datetime import date
+from pathlib import Path
 
 from sphinx_tippy import __version__
 
@@ -26,3 +27,21 @@ html_theme_options = {
     "source_branch": "main",
     "source_directory": "docs/",
 }
+
+tippy_anchor_parent_selector = "div.content"
+tippy_logo_svg = Path("tippy-logo.svg").read_text("utf8")
+tippy_custom_tips = {
+    "https://example.com": "<p>This is a custom tip for example.com</p>",
+    "https://atomiks.github.io/tippyjs": (
+        f"{tippy_logo_svg}<p>Tippy.js is the complete tooltip, popover, dropdown, and menu solution"
+        " for the web, powered by Popper.</p>"
+    ),
+}
+
+
+def setup(app):
+    app.add_object_type(
+        "confval",  # directivename
+        "confval",  # rolename
+        "pair: %s; configuration value",  # indextemplate
+    )

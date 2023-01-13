@@ -7,3 +7,5 @@ Other Caption
 ```
 
 {ref}`hallo`
+
+{doc}`../index`

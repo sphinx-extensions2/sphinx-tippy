@@ -2,6 +2,8 @@
 
 Get rich tool tips in your sphinx documentation!
 
+Using <https://atomiks.github.io/tippyjs>
+
 ```{toctree}
 folder/other
 ```
@@ -25,7 +27,7 @@ extensions = [
 ]
 ```
 
-[hi](https://via.placeholder.com/150)
+[custom tip](https://example.com)
 
 (xxx)=
 ```{figure} https://via.placeholder.com/150
@@ -48,6 +50,8 @@ c   | d
 
 ````{py:class} Foo
 This is a class
+
+It has a docstring
 ```{py:method} bar(variable: str) -> int
 This is a method
 ```
@@ -64,7 +68,7 @@ a = 1
 
 {ref}`yep <fun-fish>`
 
-{py:meth}`Foo.bar`
+{py:class}`Foo`
 
 {ref}`table`
 
@@ -78,9 +82,12 @@ a = 1
 
 {eq}`eq1`
 
+{confval}`name`
+
 ## Configuration
 
 The extension has the following configuration options:
 
-xxx
-: something
+```{confval} name
+something
+```

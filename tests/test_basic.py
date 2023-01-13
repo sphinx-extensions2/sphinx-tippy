@@ -1,7 +1,7 @@
 from sphinx_pytest.plugin import CreateDoctree
 
 
-def test_basic(sphinx_doctree: CreateDoctree):
+def test_basic(sphinx_doctree: CreateDoctree, data_regression):
     sphinx_doctree.set_conf({"extensions": ["sphinx_tippy"]})
     sphinx_doctree.buildername = "html"
     sphinx_doctree.srcdir.joinpath("hallo.png").touch()
@@ -16,14 +16,6 @@ Test
     :name: whatever
 
     Caption
-    """
+    """,
     )
-    assert (
-        [li.rstrip() for li in result.pformat().strip().splitlines()]
-        == """
-<document source="<src>/index.rst">
-    <section ids="test" names="test">
-        <title>
-            Test
-    """.strip().splitlines()
-    )
+    data_regression.check(result.app.env.tippy_data)

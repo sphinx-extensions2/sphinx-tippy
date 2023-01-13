@@ -30,6 +30,7 @@ Documentation = "https://sphinx-tippy.readthedocs.io"
 testing = [
     "pytest",
     "sphinx-pytest",
+    "pytest-regressions",
 ]
 docs = [
     "myst-parser",
@@ -41,3 +42,4 @@ profile = "black"
 
 [tool.ruff]
 line-length = 100
+extend-select = ["B0", "C4", "ICN", "ISC", "N", "RUF", "SIM", "T20"]

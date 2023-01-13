@@ -1,0 +1,30 @@
+index:
+  custom_in_page: !!set {}
+  element_id_map:
+    abc: test
+    test: test
+    whatever: whatever
+  id_to_html:
+    null: '<h1 class="tippy-header" style="margin-top: 0;">Test<a class="headerlink"
+      href="#test" title="Permalink to this heading">¶</a></h1><p>...</p>'
+    test: '<h1 class="tippy-header" style="margin-top: 0;">Test<a class="headerlink"
+      href="#test" title="Permalink to this heading">¶</a></h1><p>...</p>'
+    whatever: '<figure class="align-default" id="whatever">
+
+      <img alt="_images/hallo.png" src="_images/hallo.png"/>
+
+      <figcaption>
+
+      <p><span class="caption-text">Caption</span><a class="headerlink" href="#whatever"
+      title="Permalink to this image">¶</a></p>
+
+      </figcaption>
+
+      </figure>'
+  refs_in_page: !!set
+    ? - null
+      - test
+    : null
+    ? - null
+      - whatever
+    : null
