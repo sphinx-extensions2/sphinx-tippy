@@ -32,6 +32,8 @@ Now your website will have tooltips on many of your internal links!
 
 -  - [Custom tip](https://example.com)
 
+-  - [Wikipedia tips](https://en.wikipedia.org/wiki/Tooltip)
+
 -  - {ref}`Figure reference with URL image <figure-name-url>`
 
 -  - {ref}`Figure reference with local image <figure-name-file>`
@@ -114,6 +116,10 @@ tippy_anchor_parent_selector = "div.content"
 tippy_anchor_parent_selector = "article.bd-article"
 ```
 
+:::
+
+:::{confval} tippy_enable_wikitips
+Enable tooltips for wikipedia links, starting `https://en.wikipedia.org/wiki/`, by default `True`.
 :::
 
 :::{confval} tippy_enable_mathjax

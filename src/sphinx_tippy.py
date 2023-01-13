@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import posixpath
 import re
+import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, Dict, TypedDict, cast
@@ -11,12 +13,17 @@ from typing import Any, Dict, TypedDict, cast
 from bs4 import BeautifulSoup, NavigableString, Tag
 from docutils import nodes
 from sphinx.application import Sphinx
-from sphinx.config import Config
 from sphinx.domains.math import MathDomain
 from sphinx.errors import ExtensionError
 from sphinx.util.logging import getLogger
 
-__version__ = "0.1.0"
+try:
+    # sphinx 6.1
+    from sphinx.util.display import status_iterator  # type: ignore[import]
+except ImportError:
+    from sphinx.util import status_iterator
+
+__version__ = "0.2.0"
 
 
 def setup(app: Sphinx):
@@ -36,6 +43,7 @@ def setup(app: Sphinx):
         "html",
     )
     app.add_config_value("tippy_anchor_parent_selector", "", "html")
+    app.add_config_value("tippy_enable_wikitips", True, "html")
     app.add_config_value("tippy_enable_mathjax", False, "html")
     app.add_config_value(
         "tippy_js",
@@ -51,6 +59,30 @@ def setup(app: Sphinx):
 LOGGER = getLogger(__name__)
 
 
+@dataclass
+class TippyConfig:
+    custom_tips: dict[str, str]
+    tip_selector: str
+    skip_anchor_classes: tuple[str, ...]
+    anchor_parent_selector: str
+    enable_wikitips: bool
+    enable_mathjax: bool
+    js_files: tuple[str, ...]
+
+
+def get_tippy_config(app: Sphinx) -> TippyConfig:
+    """Get the tippy config"""
+    return TippyConfig(
+        custom_tips=app.config.tippy_custom_tips,
+        tip_selector=app.config.tippy_tip_selector,
+        skip_anchor_classes=app.config.tippy_skip_anchor_classes,
+        anchor_parent_selector=app.config.tippy_anchor_parent_selector,
+        enable_wikitips=app.config.tippy_enable_wikitips,
+        enable_mathjax=app.config.tippy_enable_mathjax,
+        js_files=app.config.tippy_js,
+    )
+
+
 def validate_config(app: Sphinx):
     """Validate the config"""
     if app.builder.name != "html":
@@ -63,10 +95,22 @@ def validate_config(app: Sphinx):
 
 
 class TippyData(TypedDict):
+    pages: dict[str, TippyPageData]
+
+
+class TippyPageData(TypedDict):
     element_id_map: dict[str, str]
     refs_in_page: set[tuple[None | str, None | str]]
     id_to_html: dict[str | None, str]
     custom_in_page: set[str]
+    wiki_titles: set[str]
+
+
+def get_tippy_data(app: Sphinx) -> TippyData:
+    """Get the tippy data"""
+    if not hasattr(app.env, "tippy_data"):
+        app.env.tippy_data = {"pages": {}, "wiki_titles": set()}  # type: ignore
+    return cast(TippyData, app.env.tippy_data)  # type: ignore
 
 
 def collect_tips(
@@ -83,9 +127,10 @@ def collect_tips(
         return
 
     page_parent = posixpath.dirname(pagename)
-    custom_tips = app.config.tippy_custom_tips
+    tippy_config = get_tippy_config(app)
+    custom_tips = tippy_config.custom_tips
 
-    if app.config.tippy_enable_mathjax:
+    if tippy_config.enable_mathjax:
         # TODO ideally we would only run this on pages that have math in the tips
         domain = cast(MathDomain, app.env.get_domain("math"))
         domain.data["has_equations"][pagename] = True
@@ -99,6 +144,7 @@ def collect_tips(
     anchor: Tag
     refs_in_page: set[tuple[None | str, str | None]] = set()
     custom_in_page: set[str] = set()
+    wiki_titles: set[str] = set()
     for anchor in body.find_all("a", {"href": True}):
 
         if not isinstance(anchor["href"], str):
@@ -124,6 +170,11 @@ def collect_tips(
         if not path:
             refs_in_page.add((None, target))
 
+        if tippy_config.enable_wikitips and path.startswith(
+            "https://en.wikipedia.org/wiki/"
+        ):
+            wiki_titles.add(path[30:])
+
         # check if the reference is on another local page
         # TODO for now we assume that page names are written in posix style with ".html" prefixes
         # and that the page name relates to the docname
@@ -132,21 +183,21 @@ def collect_tips(
             if other_pagename in app.env.all_docs:
                 refs_in_page.add((other_pagename, target))
 
-    id_to_tip_html = create_id_to_tip_html(app.config, body)
+    id_to_tip_html = create_id_to_tip_html(tippy_config, body)
 
     # store the data for later use
-    if not hasattr(app.env, "tippy_data"):
-        app.env.tippy_data = {}  # type: ignore
-    app.env.tippy_data[pagename] = {  # type: ignore
+    tippy_data = get_tippy_data(app)
+    tippy_data["pages"][pagename] = {  # type: ignore
         "element_id_map": element_id_map,
         "refs_in_page": refs_in_page,
         "id_to_html": id_to_tip_html,
         "custom_in_page": custom_in_page,
+        "wiki_titles": wiki_titles,
     }
 
     # add the JS files
     js_path = Path(app.outdir, "_static", pagename).with_suffix(".tippy.js")
-    for js_file in app.config.tippy_js:
+    for js_file in tippy_config.js_files:
         app.add_js_file(js_file, loading_method="defer")
     app.add_js_file(
         str(js_path.relative_to(Path(app.outdir, "_static"))), loading_method="defer"
@@ -173,7 +224,9 @@ def create_element_id_map(doctree: nodes.document) -> dict[str, str]:
     return id_map
 
 
-def create_id_to_tip_html(config: Config, body: BeautifulSoup) -> dict[str | None, str]:
+def create_id_to_tip_html(
+    config: TippyConfig, body: BeautifulSoup
+) -> dict[str | None, str]:
     """Create a mapping of ids to the HTML to show in the tooltip."""
     id_to_html: dict[str | None, str] = {}
 
@@ -184,7 +237,7 @@ def create_id_to_tip_html(config: Config, body: BeautifulSoup) -> dict[str | Non
     tag: Tag
 
     # these are tags where we simply copy the whole HTML
-    for tag in body.select(config.tippy_tip_selector):
+    for tag in body.select(config.tip_selector):
         if "id" in tag.attrs:
             id_to_html[str(tag["id"])] = str(tag)
 
@@ -279,6 +332,25 @@ def rewrite_local_attrs(content: str, rel_path: str) -> str:
     return str(soup)
 
 
+def generate_wikipedia_tooltip(title: str) -> str:
+    """Generate a wikipedia tooltip, from a title."""
+
+    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+    with urllib.request.urlopen(url) as response:
+        data = json.loads(response.read())
+
+    extract_html = data["extract_html"]
+    if "thumbnail" in data:
+        thumbnail_url = data["thumbnail"]["source"]
+        style = "float:left; margin-right:10px;"
+        alt = "Wikipedia thumbnail"
+        extract_html = (
+            f'<img src="{thumbnail_url}" alt="{alt}" style="{style}">' + extract_html
+        )
+
+    return extract_html
+
+
 def write_tippy_js(app: Sphinx, exception: Any):
     """For each page, filter the list of reference tooltips to only those on the page,
     and write the JS file.
@@ -288,89 +360,137 @@ def write_tippy_js(app: Sphinx, exception: Any):
     if app.builder.format != "html":
         return
 
-    tippy_data = cast(Dict[str, TippyData], getattr(app.env, "tippy_data", {}))
-    pselector = app.config.tippy_anchor_parent_selector
-    custom_tips = app.config.tippy_custom_tips
+    tippy_page_data = get_tippy_data(app)["pages"]
 
-    for pagename, data in tippy_data.items():
+    # fetch the wikipedia tooltips, caching them for rebuilds
+    wiki_cache: dict[str, str]
+    wiki_cache_path = Path(app.outdir, "tippy_wiki_cache.json")
+    if wiki_cache_path.exists():
+        with wiki_cache_path.open("r") as file:
+            wiki_cache = json.load(file)
+    else:
+        wiki_cache = {}
+    wiki_fetch = {
+        title
+        for page in tippy_page_data.values()
+        for title in page["wiki_titles"]
+        if title not in wiki_cache
+    }
+    for title in status_iterator(
+        wiki_fetch, "Fetching Wikipedia tips", length=len(wiki_fetch)
+    ):
+        try:
+            wiki_cache[title] = generate_wikipedia_tooltip(title)
+        except Exception as exc:
+            LOGGER.warning(
+                f"Could not fetch Wikipedia data for {title}: {exc} [tippy.wiki]",
+                type="tippy",
+                subtype="wiki",
+            )
+    with wiki_cache_path.open("w") as file:
+        json.dump(wiki_cache, file)
 
-        local_id_map = data["element_id_map"]
-        local_id_to_html = data["id_to_html"]
-        refs_to_html = {ref: custom_tips[ref] for ref in data["custom_in_page"]}
-        for refpage, target in data["refs_in_page"]:
+    for pagename in status_iterator(
+        tippy_page_data, "Writing .tippy.js files", length=len(tippy_page_data)
+    ):
+        write_tippy_js_page(app, pagename, wiki_cache)
 
-            if refpage is not None:
-                relpage = posixpath.normpath(
-                    posixpath.relpath(refpage, posixpath.dirname(pagename))
-                )
-                relfolder = posixpath.dirname(relpage)
-                if refpage not in tippy_data:
-                    pass
-                elif target is None:
-                    refs_to_html[f"{relpage}.html"] = rewrite_local_attrs(
-                        tippy_data[refpage]["id_to_html"][None], relfolder
-                    )
-                elif (
-                    target
-                    and target in tippy_data[refpage]["element_id_map"]
-                    and tippy_data[refpage]["element_id_map"][target]
-                    in tippy_data[refpage]["id_to_html"]
-                ):
-                    html_str = tippy_data[refpage]["id_to_html"][
-                        tippy_data[refpage]["element_id_map"][target]
-                    ]
-                    html_str = rewrite_local_attrs(html_str, relfolder)
-                    refs_to_html[f"{relpage}.html#{target}"] = html_str
+
+def write_tippy_js_page(app: Sphinx, pagename: str, wiki_cache: dict[str, str]):
+
+    tippy_page_data = get_tippy_data(app)["pages"]
+    tippy_config = get_tippy_config(app)
+    data = tippy_page_data[pagename]
+
+    local_id_map = data["element_id_map"]
+    local_id_to_html = data["id_to_html"]
+    selector_to_html: dict[str, str] = {
+        f'a[href="{ref}"]': tippy_config.custom_tips[ref]
+        for ref in data["custom_in_page"]
+    }
+    for wiki_title in data["wiki_titles"]:
+        if wiki_title in wiki_cache:
+            selector_to_html[
+                f'a[href="https://en.wikipedia.org/wiki/{wiki_title}"]'
+            ] = wiki_cache[wiki_title]
+            selector_to_html[
+                f'a[href^="https://en.wikipedia.org/wiki/{wiki_title}#"]'
+            ] = wiki_cache[wiki_title]
+    for refpage, target in data["refs_in_page"]:
+
+        if refpage is not None:
+            relpage = posixpath.normpath(
+                posixpath.relpath(refpage, posixpath.dirname(pagename))
+            )
+            relfolder = posixpath.dirname(relpage)
+            if refpage not in tippy_page_data:
+                pass
             elif target is None:
-                refs_to_html["#"] = local_id_to_html[None]
-            elif target in local_id_map and local_id_map[target] in local_id_to_html:
-                refs_to_html[f"#{target}"] = local_id_to_html[local_id_map[target]]
+                selector_to_html[f'a[href="{relpage}.html"]'] = rewrite_local_attrs(
+                    tippy_page_data[refpage]["id_to_html"][None], relfolder
+                )
+            elif (
+                target
+                and target in tippy_page_data[refpage]["element_id_map"]
+                and tippy_page_data[refpage]["element_id_map"][target]
+                in tippy_page_data[refpage]["id_to_html"]
+            ):
+                html_str = tippy_page_data[refpage]["id_to_html"][
+                    tippy_page_data[refpage]["element_id_map"][target]
+                ]
+                html_str = rewrite_local_attrs(html_str, relfolder)
+                selector_to_html[f'a[href="{relpage}.html#{target}"]'] = html_str
+        elif target is None:
+            selector_to_html['a[href="#"]'] = local_id_to_html[None]
+        elif target in local_id_map and local_id_map[target] in local_id_to_html:
+            selector_to_html[f'a[href="#{target}"]'] = local_id_to_html[
+                local_id_map[target]
+            ]
 
-        mathjax = (
-            (
-                "onShow(instance) "
-                "{MathJax.typesetPromise([instance.popper]).then(() => {});},"
-            )
-            if app.config.tippy_enable_mathjax
-            and app.builder.math_renderer_name == "mathjax"  # type: ignore[attr-defined]
-            else ""
+    pselector = tippy_config.anchor_parent_selector
+    mathjax = (
+        (
+            "onShow(instance) "
+            "{MathJax.typesetPromise([instance.popper]).then(() => {});},"
         )
-        # TODO need to only enable when math,
-        # and then need to ensure sphinx adds mathjax to the page
+        if tippy_config.enable_mathjax
+        and app.builder.math_renderer_name == "mathjax"  # type: ignore[attr-defined]
+        else ""
+    )
+    # TODO need to only enable when math,
+    # and then need to ensure sphinx adds mathjax to the page
 
-        content = (
-            dedent(
-                f"""\
-            refs_to_html = {json.dumps(refs_to_html)}
-            skip_classes = {json.dumps(app.config.tippy_skip_anchor_classes)}
+    content = (
+        dedent(
+            f"""\
+        selector_to_html = {json.dumps(selector_to_html)}
+        skip_classes = {json.dumps(tippy_config.skip_anchor_classes)}
 
-            window.onload = function () {{
-                for (const [href, tip_html] of Object.entries(refs_to_html)) {{
-                    const links = document.querySelectorAll(`{pselector} a[href="${{href}}"]`);
-                    for (const link of links) {{
-                        if (skip_classes.some(c => link.classList.contains(c))) {{
-                            continue;
-                        }}
-                        tippy(link, {{
-                            content: tip_html,
-                            allowHTML: true,
-                            interactive: false,
-                            {mathjax}
-                        }});
-                    }};
+        window.onload = function () {{
+            for (const [select, tip_html] of Object.entries(selector_to_html)) {{
+                const links = document.querySelectorAll(`{pselector} ${{select}}`);
+                for (const link of links) {{
+                    if (skip_classes.some(c => link.classList.contains(c))) {{
+                        continue;
+                    }}
+                    tippy(link, {{
+                        content: tip_html,
+                        allowHTML: true,
+                        interactive: false,
+                        {mathjax}
+                    }});
                 }};
-                console.log("tippy tips loaded!");
             }};
-            """
-            )
-            if refs_to_html
-            else ""
+            console.log("tippy tips loaded!");
+        }};
+        """
         )
+        if selector_to_html
+        else ""
+    )
 
-        # create path based on pagename
-        js_path = Path(app.outdir, "_static", *pagename.split("/")).with_suffix(
-            ".tippy.js"
-        )
-        js_path.parent.mkdir(parents=True, exist_ok=True)
-        with js_path.open("w", encoding="utf8") as handle:
-            handle.write(content)
+    # create path based on pagename
+    js_path = Path(app.outdir, "_static", *pagename.split("/")).with_suffix(".tippy.js")
+    js_path.parent.mkdir(parents=True, exist_ok=True)
+    with js_path.open("w", encoding="utf8") as handle:
+        handle.write(content)
