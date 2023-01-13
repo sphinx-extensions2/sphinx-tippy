@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
 from typing import Any, Dict, TypedDict, cast
+from uuid import uuid4
 
 from bs4 import BeautifulSoup, NavigableString, Tag
 from docutils import nodes
@@ -132,6 +133,7 @@ class TippyPageData(TypedDict):
     custom_in_page: set[str]
     wiki_titles: set[str]
     dois: set[str]
+    js_path: Path
 
 
 WIKI_PATH = "https://en.wikipedia.org/wiki/"
@@ -219,6 +221,19 @@ def collect_tips(
 
     id_to_tip_html = create_id_to_tip_html(tippy_config, body)
 
+    # create path based on pagename
+    # we also add a unique ID to the path,
+    # which is in order to avoid browsers using old cached versions
+    # lets also remove any old versions of the file when running rebuilds
+    parts = pagename.split("/")
+    for old_path in Path(app.outdir, "_static", "tippy", *parts).parent.glob(
+        f"{parts[0]}.*.js"
+    ):
+        old_path.unlink()
+    js_path = Path(
+        app.outdir, "_static", "tippy", *(pagename + f".{uuid4()}.js").split("/")
+    )
+
     # store the data for later use
     tippy_data = get_tippy_data(app)
     tippy_data["pages"][pagename] = {  # type: ignore
@@ -228,10 +243,10 @@ def collect_tips(
         "custom_in_page": custom_in_page,
         "wiki_titles": wiki_titles,
         "dois": doi_names,
+        "js_path": js_path,
     }
 
     # add the JS files
-    js_path = Path(app.outdir, "_static", pagename).with_suffix(".tippy.js")
     for js_file in tippy_config.js_files:
         app.add_js_file(js_file, loading_method="defer")
     app.add_js_file(
@@ -587,8 +602,6 @@ def write_tippy_js_page(
         else ""
     )
 
-    # create path based on pagename
-    js_path = Path(app.outdir, "_static", *pagename.split("/")).with_suffix(".tippy.js")
-    js_path.parent.mkdir(parents=True, exist_ok=True)
-    with js_path.open("w", encoding="utf8") as handle:
+    data["js_path"].parent.mkdir(parents=True, exist_ok=True)
+    with data["js_path"].open("w", encoding="utf8") as handle:
         handle.write(content)

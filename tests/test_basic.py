@@ -18,4 +18,7 @@ Test
     Caption
     """,
     )
+    # remove js_path which are not deterministic
+    for value in result.app.env.tippy_data["pages"].values():
+        value.pop("js_path", None)
     data_regression.check(result.app.env.tippy_data)
