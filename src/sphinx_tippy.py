@@ -25,7 +25,7 @@ try:
 except ImportError:
     from sphinx.util import status_iterator
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 
 def setup(app: Sphinx):
@@ -282,7 +282,7 @@ def create_id_to_tip_html(
 
     # create a tip for the actual page, by finding the first heading
     if title := body.find(["h1", "h2", "h3", "h4", "h5", "h6"]):
-        id_to_html[None] = _get_header_html(title) + "<p>...</p>"
+        id_to_html[None] = _get_header_html(title)
 
     tag: Tag
 
@@ -315,7 +315,7 @@ def create_id_to_tip_html(
         elif tag.name == "section" and (
             header := tag.find(["h1", "h2", "h3", "h4", "h5", "h6"])
         ):
-            id_to_html[str(tag["id"])] = _get_header_html(header) + "<p>...</p>"
+            id_to_html[str(tag["id"])] = _get_header_html(header)
 
         elif tag.name == "div" and "math-wrapper" in (tag.get("class") or []):
             # remove an span with eqno class, since it is not needed
