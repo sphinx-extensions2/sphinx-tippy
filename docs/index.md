@@ -68,6 +68,19 @@ Now your website will have tooltips on many of your internal links!
 
     This is another paragraph
 
+## How does it work?
+
+The extension uses the [tippy.js](https://atomiks.github.io/tippyjs) library to create tooltips.
+
+Currently, all tips are created during the build process, so there is no need for a server and, once loaded, all tips are very responsive
+(although [dynamic fetching](https://atomiks.github.io/tippyjs/v6/ajax/) could be implemented later).
+
+The internal tips are created simply by "scraping" the built HTML, which bypasses having to deal with the sphinx internals, like domains etc.
+
+Note, there is another sphinx extension for hover tips; [sphinx-hoverxref](https://github.com/readthedocs/sphinx-hoverxref),
+however, one of the annoyances with this is that documentation has to be hosted on Read the Docs for it to work.
+It does though have some nice features, like tooltips for intersphinx, which we would like here.
+
 ## Configuration
 
 The extension has the following configuration options:
