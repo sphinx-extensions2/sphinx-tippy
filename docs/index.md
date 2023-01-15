@@ -36,6 +36,8 @@ Now your website will have tooltips on many of your links!
 
 -  - [DOI tip](https://doi.org/10.1186/gm483)
 
+-  - [ReadTheDocs tip](https://www.sphinx-doc.org/en/master/usage/quickstart.html#intersphinx)
+
 -  - {ref}`Figure reference with URL image <figure-name-url>`
 
 -  - {ref}`Figure reference with local image <figure-name-file>`
@@ -80,22 +82,34 @@ Currently, all tips are created during the build process, so there is no need fo
 The internal tips are created simply by "scraping" the built HTML, which bypasses having to deal with the sphinx internals, like domains etc.
 
 Note, there is another sphinx extension for hover tips; [sphinx-hoverxref](https://github.com/readthedocs/sphinx-hoverxref),
-however, one of the annoyances with this is that documentation has to be hosted on Read the Docs for it to work.
-It does though have some nice features, like tooltips for intersphinx, which we would like here.
+however, one of the annoyances with this is that documentation has to be hosted on Read the Docs for it to work, since that used the RTD embed API dynamically.
 
 ## Configuration
 
-The extension has the following configuration options:
+The extension has the following configuration options.
 
-:::{confval} tippy_custom_tips
-A dictionary, mapping URLs to HTML strings, which will be used to create custom tips.
+## Display
 
-For example, to add a tip for the URL `https://example.com`:
+:::{confval} tippy_props
+Overrides for the [tippy.js props](https://atomiks.github.io/tippyjs/v6/all-props/) to use, by default:
 
 ```python
-tippy_custom_tips = {
-    "https://example.com": "<p>This is a custom tip!</p>"
-}
+tippy_props = {"placement": "auto-start", "maxWidth": 500, "interactive": False, "arrow": True}
+```
+
+Note, only the `placement`, `maxWidth` and `interactive` props are allowed to be overridden currently.
+
+### Filters
+
+These configurations enable filtering of what tips are created, and shown.
+
+:::{confval} tippy_skip_urls
+A list of URL [regexes](https://docs.python.org/3/howto/regex.html#regex-howto) to skip, for example:
+
+```python
+tippy_skip_urls = [
+    "https://example.com/name_prefix.*",
+]
 ```
 
 :::
@@ -110,7 +124,7 @@ tippy_tip_selector = "figure, table, img, p, aside, div.admonition, div.literal-
 :::
 
 :::{confval} tippy_skip_anchor_classes
-Skip creating tooltips for anchors with these classes, by default:
+Skip showing tooltips for anchors with these classes, by default:
 
 ```python
 tippy_skip_anchor_classes = (
@@ -122,7 +136,7 @@ tippy_skip_anchor_classes = (
 :::
 
 :::{confval} tippy_anchor_parent_selector
-Only create tool tips for anchors within this select, by default `""`, examples:
+Only show tool tips for anchors within this select, by default `""`, examples:
 
 ```python
 # For Furo theme:
@@ -130,6 +144,24 @@ tippy_anchor_parent_selector = "div.content"
 # For pydata theme:
 tippy_anchor_parent_selector = "article.bd-article"
 ```
+
+:::
+
+### External APIs
+
+These configurations enable fetching tips from external APIs.
+
+:::{confval} tippy_rtd_urls
+A list of URL prefixes to use for ReadTheDocs tooltips (using the [`/api/v3/embed/` API](https://docs.readthedocs.io/en/stable/api/v3.html#embed)), for example:
+
+```python
+tippy_rtd_urls = [
+    "https://www.sphinx-doc.org/en/master/",
+]
+```
+
+This works for any ReadTheDocs hosted documentation.
+It works well with the [intersphinx extension](https://www.sphinx-doc.org/en/master/usage/quickstart.html#intersphinx).
 
 :::
 
@@ -162,6 +194,22 @@ The [jinja template](https://jinja.palletsprojects.com) to use for formatting DO
 ```
 
 (See <https://github.com/CrossRef/rest-api-doc/blob/master/api_format.md>)
+:::
+
+
+### Miscellaneous
+
+:::{confval} tippy_custom_tips
+A dictionary, mapping URLs to HTML strings, which will be used to create custom tips.
+
+For example, to add a tip for the URL `https://example.com`:
+
+```python
+tippy_custom_tips = {
+    "https://example.com": "<p>This is a custom tip!</p>"
+}
+```
+
 :::
 
 :::{confval} tippy_enable_mathjax

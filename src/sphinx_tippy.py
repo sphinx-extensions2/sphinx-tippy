@@ -4,13 +4,13 @@ from __future__ import annotations
 import json
 import posixpath
 import re
-import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Dict, TypedDict, cast
+from typing import Any, Dict, Sequence, TypedDict, cast
 from uuid import uuid4
 
+import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
 from docutils import nodes
 from jinja2 import Environment
@@ -25,17 +25,14 @@ try:
 except ImportError:
     from sphinx.util import status_iterator
 
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 
 def setup(app: Sphinx):
     """Setup the extension"""
-    app.add_config_value("tippy_custom_tips", {}, "html", Dict[str, str])
-    app.add_config_value(
-        "tippy_tip_selector",
-        "figure, table, img, p, aside, div.admonition, div.literal-block-wrapper",
-        "html",
-    )
+    app.add_config_value("tippy_props", {}, "html")
+    # config for filtering tooltip creation/showing
+    app.add_config_value("tippy_skip_urls", (), "html", [list, tuple])
     app.add_config_value(
         "tippy_skip_anchor_classes",
         (
@@ -43,10 +40,20 @@ def setup(app: Sphinx):
             "sd-stretched-link",
         ),
         "html",
+        [list, tuple],
     )
     app.add_config_value("tippy_anchor_parent_selector", "", "html")
+
+    app.add_config_value("tippy_custom_tips", {}, "html", Dict[str, str])
+    app.add_config_value(
+        "tippy_tip_selector",
+        "figure, table, img, p, aside, div.admonition, div.literal-block-wrapper",
+        "html",
+    )
+    # config for API based tooltips
     app.add_config_value("tippy_enable_wikitips", True, "html")
     app.add_config_value("tippy_enable_doitips", True, "html")
+    app.add_config_value("tippy_rtd_urls", [], "html", [list, tuple])
     app.add_config_value("tippy_doi_api", "https://api.crossref.org/works/", "html")
     # see https://github.com/CrossRef/rest-api-doc/blob/master/api_format.md
     # or for https://api.datacite.org/dois/
@@ -71,8 +78,10 @@ def setup(app: Sphinx):
         "tippy_js",
         ("https://unpkg.com/@popperjs/core@2", "https://unpkg.com/tippy.js@6"),
         "html",
+        [list, tuple],
     )
-    app.connect("builder-inited", validate_config)
+
+    app.connect("builder-inited", compile_config)
     app.connect("html-page-context", collect_tips, priority=450)  # before mathjax
     app.connect("build-finished", write_tippy_js)
     return {"version": __version__, "parallel_read_safe": True}
@@ -83,36 +92,86 @@ LOGGER = getLogger(__name__)
 
 @dataclass
 class TippyConfig:
+    props: dict[str, str]
     custom_tips: dict[str, str]
     tip_selector: str
-    skip_anchor_classes: tuple[str, ...]
+    skip_url_regexes: Sequence[re.Pattern]
+    skip_anchor_classes: Sequence[str]
     anchor_parent_selector: str
     enable_wikitips: bool
     enable_mathjax: bool
     enable_doitips: bool
+    tippy_rtd_urls: Sequence[str]
     doi_template: str
     doi_api: str
     js_files: tuple[str, ...]
 
 
 def get_tippy_config(app: Sphinx) -> TippyConfig:
-    """Get the tippy config"""
-    return TippyConfig(
+    """Get the extension config"""
+    return app.env.tippy_config  # type: ignore[attr-defined]
+
+
+def compile_config(app: Sphinx):
+    """Compile and validate the config for this extension."""
+    # compile the regexes
+    skip_url_regexes = [re.compile(regex) for regex in app.config.tippy_skip_urls]
+    # validate the props
+    updates = app.config.tippy_props or {}
+    if not isinstance(updates, dict):
+        raise ExtensionError(f"tippy_props must be a dictionary, not a {type(updates)}")
+    props = dict(
+        {"placement": "auto-start", "maxWidth": 500, "interactive": False}, **updates
+    )
+    if set(props.keys()) - {"placement", "maxWidth", "interactive"}:
+        raise ExtensionError(
+            "tippy_props can only contain keys 'placement', 'maxWidth', 'interactive'"
+        )
+    allowed_placements = {
+        "auto",
+        "auto-start",
+        "auto-end",
+        "top",
+        "top-start",
+        "top-end",
+        "bottom",
+        "bottom-start",
+        "bottom-end",
+        "right",
+        "right-start",
+        "right-end",
+        "left",
+        "left-start",
+        "left-end",
+    }
+    if props["placement"] not in allowed_placements:
+        raise ExtensionError(
+            f"tippy_props['placement'] must one of {allowed_placements}"
+        )
+    props["placement"] = f"'{props['placement']}'"
+    if not (props["maxWidth"] is None or isinstance(props["maxWidth"], int)):
+        raise ExtensionError("tippy_props['maxWidth'] must be an integer or None")
+    props["maxWidth"] = (
+        "'none'" if props["maxWidth"] is None else str(props["maxWidth"])
+    )
+    if not isinstance(props["interactive"], bool):
+        raise ExtensionError("tippy_props['interactive'] must be a boolean")
+    props["interactive"] = "true" if props["interactive"] else "false"
+    app.env.tippy_config = TippyConfig(  # type: ignore[attr-defined]
+        props=props,
         custom_tips=app.config.tippy_custom_tips,
+        skip_url_regexes=skip_url_regexes,
         tip_selector=app.config.tippy_tip_selector,
         skip_anchor_classes=app.config.tippy_skip_anchor_classes,
         anchor_parent_selector=app.config.tippy_anchor_parent_selector,
         enable_wikitips=app.config.tippy_enable_wikitips,
         enable_doitips=app.config.tippy_enable_doitips,
         enable_mathjax=app.config.tippy_enable_mathjax,
+        tippy_rtd_urls=app.config.tippy_rtd_urls,
         doi_template=app.config.tippy_doi_template,
         doi_api=app.config.tippy_doi_api,
         js_files=app.config.tippy_js,
     )
-
-
-def validate_config(app: Sphinx):
-    """Validate the config"""
     if app.builder.name != "html":
         return
     if (
@@ -133,6 +192,7 @@ class TippyPageData(TypedDict):
     custom_in_page: set[str]
     wiki_titles: set[str]
     dois: set[str]
+    rtd_urls: set[str]
     js_path: Path
 
 
@@ -180,6 +240,7 @@ def collect_tips(
     custom_in_page: set[str] = set()
     wiki_titles: set[str] = set()
     doi_names: set[str] = set()
+    rtd_urls: set[str] = set()
     for anchor in body.find_all("a", {"href": True}):
 
         if not isinstance(anchor["href"], str):
@@ -188,6 +249,18 @@ def collect_tips(
         if anchor["href"] in custom_tips:
             custom_in_page.add(anchor["href"])
             continue
+
+        if any(regex.match(anchor["href"]) for regex in tippy_config.skip_url_regexes):
+            continue
+
+        if tippy_config.enable_doitips and anchor["href"].startswith(DOI_PATH):
+            doi_names.add(anchor["href"][len(DOI_PATH) :])
+            continue
+
+        for urls in tippy_config.tippy_rtd_urls:
+            if anchor["href"].startswith(urls):
+                rtd_urls.add(anchor["href"])
+                continue
 
         # split up the href into a path and a target,
         # e.g. `path/to/file.html#target` -> `path/to/file.html` and `target`
@@ -204,17 +277,16 @@ def collect_tips(
         # check if the reference is local to this page
         if not path:
             refs_in_page.add((None, target))
+            continue
 
         if tippy_config.enable_wikitips and path.startswith(WIKI_PATH):
             wiki_titles.add(path[len(WIKI_PATH) :])
-
-        if tippy_config.enable_doitips and path.startswith(DOI_PATH):
-            doi_names.add(path[len(DOI_PATH) :])
+            continue
 
         # check if the reference is on another local page
         # TODO for now we assume that page names are written in posix style with ".html" prefixes
         # and that the page name relates to the docname
-        elif path.endswith(".html"):
+        if path.endswith(".html"):
             other_pagename = posixpath.normpath(posixpath.join(page_parent, path[:-5]))
             if other_pagename in app.env.all_docs:
                 refs_in_page.add((other_pagename, target))
@@ -243,6 +315,7 @@ def collect_tips(
         "custom_in_page": custom_in_page,
         "wiki_titles": wiki_titles,
         "dois": doi_names,
+        "rtd_urls": rtd_urls,
         "js_path": js_path,
     }
 
@@ -296,7 +369,7 @@ def create_id_to_tip_html(
 
         if tag.name == "dt":
             # copy the whole HTML
-            id_to_html[str(tag["id"])] = str(tag)
+            id_to_html[str(tag["id"])] = str(strip_classes(tag.__copy__()))
             # if the next tag is a dd, copy that too
             if (next_sibling := next_sibling_tag(tag)) and next_sibling.name == "dd":
                 copy_dd = next_sibling.__copy__()
@@ -328,6 +401,13 @@ def create_id_to_tip_html(
             id_to_html[str(tag["id"])] = str(tag_copy)
 
     return id_to_html
+
+
+def strip_classes(tag: Tag, classes: tuple[str] = ("headerlink",)) -> Tag:
+    """Strip tag with certain classes"""
+    for child in tag.find_all(class_=classes):
+        child.decompose()
+    return tag
 
 
 def next_sibling_tag(tag: Tag) -> Tag | None:
@@ -386,8 +466,7 @@ def generate_wikipedia_tooltip(title: str) -> str:
     """Generate a wikipedia tooltip, from a title."""
 
     url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
-    with urllib.request.urlopen(url) as response:
-        data = json.loads(response.read())
+    data = requests.get(url).json()
 
     extract_html = data["extract_html"]
     if "thumbnail" in data:
@@ -455,8 +534,7 @@ def fetch_doi_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str
     for doi in status_iterator(doi_fetch, "Fetching DOI tips", length=len(doi_fetch)):
         url = f"{config.doi_api}{doi}"
         try:
-            with urllib.request.urlopen(url) as response:
-                data = json.loads(response.read())
+            data = requests.get(url).json()
         except Exception as exc:
             LOGGER.warning(
                 f"Could not fetch DOI data for {doi}: {exc} [tippy.doi]",
@@ -479,6 +557,40 @@ def fetch_doi_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str
     return doi_cache
 
 
+def fetch_rtd_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str]:
+    """fetch the rtd tooltips, caching them for rebuilds."""
+    rtd_cache: dict[str, str]
+    rtd_cache_path = Path(app.outdir, "tippy_rtd_cache.json")
+    if rtd_cache_path.exists():
+        with rtd_cache_path.open("r") as file:
+            rtd_cache = json.load(file)
+    else:
+        rtd_cache = {}
+    rtd_fetch = {
+        rtd
+        for page in data.values()
+        for rtd in page["rtd_urls"]
+        if rtd not in rtd_cache
+    }
+    for rtd in status_iterator(rtd_fetch, "Fetching RTD tips", length=len(rtd_fetch)):
+        # see https://docs.readthedocs.io/en/stable/api/v3.html#embed
+        # TODO is this all that needs to be done, to escape the rtd url?
+        url = f"https://readthedocs.org/api/v3/embed/?url={rtd.replace('#', '%23')}"
+        try:
+            content = requests.get(url).json()["content"]
+            if content and BeautifulSoup(content, "html.parser").text:
+                rtd_cache[rtd] = content
+        except Exception as exc:
+            LOGGER.warning(
+                f"Could not fetch RTD data for {rtd}: {exc} [tippy.rtd]",
+                type="tippy",
+                subtype="rtd",
+            )
+    with rtd_cache_path.open("w") as file:
+        json.dump(rtd_cache, file)
+    return rtd_cache
+
+
 def write_tippy_js(app: Sphinx, exception: Any):
     """For each page, filter the list of reference tooltips to only those on the page,
     and write the JS file.
@@ -492,15 +604,20 @@ def write_tippy_js(app: Sphinx, exception: Any):
 
     wiki_cache = fetch_wikipedia_tips(app, tippy_page_data)
     doi_cache = fetch_doi_tips(app, tippy_page_data)
+    rtd_cache = fetch_rtd_tips(app, tippy_page_data)
 
     for pagename in status_iterator(
-        tippy_page_data, "Writing .tippy.js files", length=len(tippy_page_data)
+        tippy_page_data, "Writing tippy data files", length=len(tippy_page_data)
     ):
-        write_tippy_js_page(app, pagename, wiki_cache, doi_cache)
+        write_tippy_props_page(app, pagename, wiki_cache, doi_cache, rtd_cache)
 
 
-def write_tippy_js_page(
-    app: Sphinx, pagename: str, wiki_cache: dict[str, str], doi_cache: dict[str, str]
+def write_tippy_props_page(
+    app: Sphinx,
+    pagename: str,
+    wiki_cache: dict[str, str],
+    doi_cache: dict[str, str],
+    rtd_cache: dict[str, str],
 ):
     """Write the JS file for a single page."""
     tippy_page_data = get_tippy_data(app)["pages"]
@@ -521,6 +638,9 @@ def write_tippy_js_page(
     for doi in data["dois"]:
         if doi in doi_cache:
             selector_to_html[f'a[href="{DOI_PATH}{doi}"]'] = doi_cache[doi]
+    for rtd in data["rtd_urls"]:
+        if rtd in rtd_cache:
+            selector_to_html[f'a[href="{rtd}"]'] = rtd_cache[rtd]
     for refpage, target in data["refs_in_page"]:
 
         if refpage is not None:
@@ -573,6 +693,8 @@ def write_tippy_js_page(
     # TODO need to only enable when math,
     # and then need to ensure sphinx adds mathjax to the page
 
+    tippy_props = ", ".join(f"{k}: {v}" for k, v in tippy_config.props.items())
+
     content = (
         dedent(
             f"""\
@@ -589,7 +711,8 @@ def write_tippy_js_page(
                     tippy(link, {{
                         content: tip_html,
                         allowHTML: true,
-                        interactive: false,
+                        arrow: true,
+                        {tippy_props},
                         {mathjax}
                     }});
                 }};

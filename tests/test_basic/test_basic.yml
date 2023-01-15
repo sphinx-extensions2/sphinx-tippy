@@ -30,5 +30,6 @@ pages:
       ? - null
         - whatever
       : null
+    rtd_urls: !!set {}
     wiki_titles: !!set {}
 wiki_titles: !!set {}

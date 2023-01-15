@@ -33,6 +33,7 @@ repos:
       - docutils-stubs
       - sphinx~=5.0
       - types-beautifulsoup4
+      - types-requests
       files: >
         (?x)^(
             src/.*py|

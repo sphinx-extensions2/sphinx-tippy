@@ -39,6 +39,10 @@ tippy_custom_tips = {
         "and menu solution for the web, powered by Popper.</p>"
     ),
 }
+tippy_rtd_urls = [
+    "https://www.sphinx-doc.org/en/master/",
+    "https://docs.readthedocs.io/en/stable/",
+]
 
 
 def setup(app):

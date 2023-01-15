@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg width="80%" height="80%" viewBox="0 0 225 200" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+<svg width="50%" height="50%" viewBox="0 0 225 200" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
     <g id="Artboard" transform="matrix(1,0,0,1,1.5,8)">
         <g id="Rectangle-3" transform="matrix(0.879012,0.879012,-0.879012,0.879012,151.249,-84.6668)">
             <path d="M130.778,139.815C130.778,137.534 128.926,135.682 126.645,135.682L94.911,135.682C92.63,135.682 90.778,137.534 90.778,139.815L90.778,171.549C90.778,173.83 92.63,175.682 94.911,175.682L126.645,175.682C128.926,175.682 130.778,173.83 130.778,171.549L130.778,139.815Z" style="fill:rgb(161,255,238);"/>
