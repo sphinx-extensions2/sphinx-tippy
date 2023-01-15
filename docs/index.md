@@ -88,7 +88,7 @@ however, one of the annoyances with this is that documentation has to be hosted 
 
 The extension has the following configuration options.
 
-## Display
+### Display
 
 :::{confval} tippy_props
 Overrides for the [tippy.js props](https://atomiks.github.io/tippyjs/v6/all-props/) to use, by default:
@@ -98,6 +98,7 @@ tippy_props = {"placement": "auto-start", "maxWidth": 500, "interactive": False,
 ```
 
 Note, only the `placement`, `maxWidth` and `interactive` props are allowed to be overridden currently.
+:::
 
 ### Filters
 
