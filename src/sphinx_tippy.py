@@ -25,7 +25,7 @@ try:
 except ImportError:
     from sphinx.util import status_iterator
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 
 def setup(app: Sphinx):
@@ -80,6 +80,7 @@ def setup(app: Sphinx):
         "html",
         [list, tuple],
     )
+    app.add_config_value("tippy_add_class", "", "html")
 
     app.connect("builder-inited", compile_config)
     app.connect("html-page-context", collect_tips, priority=450)  # before mathjax
@@ -105,6 +106,7 @@ class TippyConfig:
     doi_template: str
     doi_api: str
     js_files: tuple[str, ...]
+    tippy_add_class: str
 
 
 def get_tippy_config(app: Sphinx) -> TippyConfig:
@@ -171,6 +173,7 @@ def compile_config(app: Sphinx):
         doi_template=app.config.tippy_doi_template,
         doi_api=app.config.tippy_doi_api,
         js_files=app.config.tippy_js,
+        tippy_add_class=app.config.tippy_add_class,
     )
     if app.builder.name != "html":
         return
@@ -693,8 +696,10 @@ def write_tippy_props_page(
     # TODO need to only enable when math,
     # and then need to ensure sphinx adds mathjax to the page
 
+    tippy_add_class = ""
+    if tippy_config.tippy_add_class:
+        tippy_add_class = f"link.classList.add({tippy_config.tippy_add_class!r});"
     tippy_props = ", ".join(f"{k}: {v}" for k, v in tippy_config.props.items())
-
     content = (
         dedent(
             f"""\
@@ -708,6 +713,7 @@ def write_tippy_props_page(
                     if (skip_classes.some(c => link.classList.contains(c))) {{
                         continue;
                     }}
+                    {tippy_add_class}
                     tippy(link, {{
                         content: tip_html,
                         allowHTML: true,

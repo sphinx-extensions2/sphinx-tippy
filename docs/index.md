@@ -100,6 +100,29 @@ tippy_props = {"placement": "auto-start", "maxWidth": 500, "interactive": False,
 Note, only the `placement`, `maxWidth` and `interactive` props are allowed to be overridden currently.
 :::
 
+:::{confval} tippy_add_class
+Add a class name to all elements with tips.
+
+For example this can be used to change the style of the cursor when hovering over a tip (see [`html_css_files`](https://www.sphinx-doc.org/en/master/usage/configuration.html#confval-html_css_files)):
+
+`conf.py`:
+
+```python
+html_static_path = ['_static']
+html_css_files = ["tippy.css"]
+tippy_add_class = "has-tippy"
+```
+
+`_static/tippy.css`:
+
+```css
+.has-tippy:hover {
+    cursor: help;
+}
+```
+
+:::
+
 ### Filters
 
 These configurations enable filtering of what tips are created, and shown.
