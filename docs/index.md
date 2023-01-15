@@ -72,6 +72,31 @@ Now your website will have tooltips on many of your links!
 
     This is another paragraph
 
+:::{important}
+Dependent on the theme you ar using with sphinx,
+you may need to add some CSS to your `conf.py` to make the tooltips show correctly.
+
+For example, for the [Pydata Sphinx Theme](https://pydata-sphinx-theme.readthedocs.io):
+
+`conf.py`:
+
+```python
+html_static_path = ['_static']
+html_css_files = ["tippy.css"]
+```
+
+`_static/tippy.css`:
+
+```css
+.tippy-box {
+    background-color:var(--pst-color-surface);
+    color:var(--pst-color-text-base);
+    border: 1px solid var(--pst-color-border);
+}
+```
+
+:::
+
 ## How does it work?
 
 The extension uses the [tippy.js](https://atomiks.github.io/tippyjs) library to create tooltips.
@@ -97,7 +122,7 @@ Overrides for the [tippy.js props](https://atomiks.github.io/tippyjs/v6/all-prop
 tippy_props = {"placement": "auto-start", "maxWidth": 500, "interactive": False, "arrow": True}
 ```
 
-Note, only the `placement`, `maxWidth` and `interactive` props are allowed to be overridden currently.
+Note, only the `placement`, `maxWidth`, `theme`, and `interactive` props are allowed to be overridden currently.
 :::
 
 :::{confval} tippy_add_class
