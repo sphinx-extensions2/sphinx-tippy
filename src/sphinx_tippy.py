@@ -304,6 +304,8 @@ def collect_tips(
     # we also add a unique ID to the path,
     # which is in order to avoid browsers using old cached versions
     # lets also remove any old versions of the file when running rebuilds
+    # TODO ideally here, we would just add a query string to the script load
+    # see: https://github.com/sphinx-doc/sphinx/issues/11133
     parts = pagename.split("/")
     for old_path in Path(app.outdir, "_static", "tippy", *parts).parent.glob(
         f"{parts[0]}.*.js"
