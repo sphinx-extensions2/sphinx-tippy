@@ -24,7 +24,7 @@ myst_enable_extensions = ["deflist", "colon_fence"]
 html_theme = "furo"
 html_logo = "tippy-logo.svg"
 html_theme_options = {
-    "source_repository": "https://github.com/chrisjsewell/sphinx_tippy/",
+    "source_repository": "https://github.com/chrisjsewell/sphinx-tippy/",
     "source_branch": "main",
     "source_directory": "docs/",
 }
