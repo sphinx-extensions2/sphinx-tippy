@@ -25,7 +25,7 @@ dependencies = [
 ]
 
 [project.urls]
-Home = "https://github.com/chrisjsewell/sphinx_tippy"
+Home = "https://github.com/chrisjsewell/sphinx-tippy"
 Documentation = "https://sphinx-tippy.readthedocs.io"
 
 [project.optional-dependencies]
