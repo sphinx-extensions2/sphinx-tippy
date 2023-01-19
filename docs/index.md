@@ -1,6 +1,6 @@
 # Sphinx Tippy
 
-![GitHub Repo stars](https://img.shields.io/github/stars/chrisjsewell/sphinx-tippy?label=Like%20and%20Share%21&style=social)
+[![GitHub Repo stars](https://img.shields.io/github/stars/chrisjsewell/sphinx-tippy?label=Like%20and%20Share%21&style=social)](https://github.com/chrisjsewell/sphinx-tippy)
 
 Get rich hover tips in your sphinx documentation.
 
