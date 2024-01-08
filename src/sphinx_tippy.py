@@ -249,7 +249,6 @@ def collect_tips(
     doi_names: set[str] = set()
     rtd_urls: set[str] = set()
     for anchor in body.find_all("a", {"href": True}):
-
         if not isinstance(anchor["href"], str):
             continue
 
@@ -375,7 +374,6 @@ def create_id_to_tip_html(
 
     # these are tags where we copy the HTML in a bespoke way
     for tag in body.find_all(id=True):
-
         if tag.name == "dt":
             # copy the whole HTML
             id_to_html[str(tag["id"])] = str(strip_classes(tag.__copy__()))
@@ -651,7 +649,6 @@ def write_tippy_props_page(
         if rtd in rtd_cache:
             selector_to_html[f'a[href="{rtd}"]'] = rtd_cache[rtd]
     for refpage, target in data["refs_in_page"]:
-
         if refpage is not None:
             relpage = posixpath.normpath(
                 posixpath.relpath(refpage, posixpath.dirname(pagename))
