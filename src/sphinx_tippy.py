@@ -126,16 +126,19 @@ def compile_config(app: Sphinx):
     props = dict(
         {"placement": "auto-start", "maxWidth": 500, "interactive": False}, **updates
     )
-    if set(props.keys()) - {
+
+    supported_properties = {
         "placement",
         "maxWidth",
         "interactive",
         "theme",
         "delay",
         "duration",
-    }:
+    }
+
+    if set(props.keys()) - supported_properties:
         raise ExtensionError(
-            "tippy_props can only contain keys 'placement', 'maxWidth', 'interactive', 'theme', 'delay', or 'duration'"
+            "tippy_props can only contain keys '%s'" % "', '".join(supported_properties)
         )
     allowed_placements = {
         "auto",
