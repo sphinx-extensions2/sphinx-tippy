@@ -131,10 +131,11 @@ def compile_config(app: Sphinx):
         "maxWidth",
         "interactive",
         "theme",
+        "delay",
         "duration",
     }:
         raise ExtensionError(
-            "tippy_props can only contain keys 'placement', 'maxWidth', 'interactive', 'theme', or 'duration'"
+            "tippy_props can only contain keys 'placement', 'maxWidth', 'interactive', 'theme', 'delay', or 'duration'"
         )
     allowed_placements = {
         "auto",
@@ -170,6 +171,10 @@ def compile_config(app: Sphinx):
         if not (props["theme"] is None or isinstance(props["theme"], str)):
             raise ExtensionError("tippy_props['theme'] must be None or a string")
         props["theme"] = f"'{props['theme']}'" if props["theme"] else "null"
+    if "delay" in props:
+        if not (props["delay"] is None or isinstance(props["delay"], list)):
+            raise ExtensionError("tippy_props['delay'] must be None or a list")
+        props["delay"] = props["delay"] if props["delay"] else "null"
     if "duration" in props:
         if not (props["duration"] is None or isinstance(props["duration"], list)):
             raise ExtensionError("tippy_props['duration'] must be None or a list")
