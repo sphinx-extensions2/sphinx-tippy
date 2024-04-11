@@ -1,4 +1,5 @@
 """Get rich tool tips in your sphinx documentation!"""
+
 from __future__ import annotations
 
 import json
@@ -127,7 +128,7 @@ def compile_config(app: Sphinx):
     )
     if set(props.keys()) - {"placement", "maxWidth", "interactive", "theme"}:
         raise ExtensionError(
-            "tippy_props can only contain keys 'placement', 'maxWidth', 'interactive'"
+            "tippy_props can only contain keys 'placement', 'maxWidth', 'interactive', or 'theme'"
         )
     allowed_placements = {
         "auto",

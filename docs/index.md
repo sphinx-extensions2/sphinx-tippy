@@ -121,7 +121,7 @@ The extension has the following configuration options.
 Overrides for the [tippy.js props](https://atomiks.github.io/tippyjs/v6/all-props/) to use, by default:
 
 ```python
-tippy_props = {"placement": "auto-start", "maxWidth": 500, "interactive": False, "arrow": True}
+tippy_props = {"placement": "auto-start", "maxWidth": 500, "interactive": False, "theme": "material"}
 ```
 
 Note, only the `placement`, `maxWidth`, `theme`, and `interactive` props are allowed to be overridden currently.
