@@ -1,4 +1,5 @@
 """Get rich tool tips in your sphinx documentation!"""
+
 from __future__ import annotations
 
 import json
@@ -125,9 +126,19 @@ def compile_config(app: Sphinx):
     props = dict(
         {"placement": "auto-start", "maxWidth": 500, "interactive": False}, **updates
     )
-    if set(props.keys()) - {"placement", "maxWidth", "interactive", "theme"}:
+
+    supported_properties = {
+        "placement",
+        "maxWidth",
+        "interactive",
+        "theme",
+        "delay",
+        "duration",
+    }
+
+    if set(props.keys()) - supported_properties:
         raise ExtensionError(
-            "tippy_props can only contain keys 'placement', 'maxWidth', 'interactive'"
+            "tippy_props can only contain keys '%s'" % "', '".join(supported_properties)
         )
     allowed_placements = {
         "auto",
@@ -163,6 +174,14 @@ def compile_config(app: Sphinx):
         if not (props["theme"] is None or isinstance(props["theme"], str)):
             raise ExtensionError("tippy_props['theme'] must be None or a string")
         props["theme"] = f"'{props['theme']}'" if props["theme"] else "null"
+    if "delay" in props:
+        if not (props["delay"] is None or isinstance(props["delay"], list)):
+            raise ExtensionError("tippy_props['delay'] must be None or a list")
+        props["delay"] = props["delay"] if props["delay"] else "null"
+    if "duration" in props:
+        if not (props["duration"] is None or isinstance(props["duration"], list)):
+            raise ExtensionError("tippy_props['duration'] must be None or a list")
+        props["duration"] = props["duration"] if props["duration"] else "null"
     app.env.tippy_config = TippyConfig(  # type: ignore[attr-defined]
         props=props,
         custom_tips=app.config.tippy_custom_tips,
