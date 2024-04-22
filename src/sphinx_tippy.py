@@ -416,7 +416,12 @@ def create_id_to_tip_html(
         ):
             id_to_html[str(tag["id"])] = _get_header_html(header)
 
-        elif tag.name == "div" and "math-wrapper" in (tag.get("class") or []):
+        elif tag.name == "div" and (
+            all(
+                class_to_check in (tag.get("class") or [])
+                for class_to_check in ("math", "notranslate", "nohighlight")
+            )
+        ):
             # remove an span with eqno class, since it is not needed
             # and it can cause issues with the tooltip
             # (e.g. if the span is the last element in the div)
