@@ -1,4 +1,5 @@
 """Get rich tool tips in your sphinx documentation!"""
+
 from __future__ import annotations
 
 import json
