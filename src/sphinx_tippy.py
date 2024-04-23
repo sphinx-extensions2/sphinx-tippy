@@ -45,7 +45,7 @@ def setup(app: Sphinx):
     )
     app.add_config_value("tippy_anchor_parent_selector", "", "html")
 
-    app.add_config_value("tippy_custom_tips", {}, "html", Dict[str, str])
+    app.add_config_value("tippy_custom_tips", {}, "html", (dict,))
     app.add_config_value(
         "tippy_tip_selector",
         "figure, table, img, p, aside, div.admonition, div.literal-block-wrapper",
