@@ -26,7 +26,7 @@ try:
 except ImportError:
     from sphinx.util import status_iterator
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 
 
 def setup(app: Sphinx):
