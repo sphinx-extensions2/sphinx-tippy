@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Dict, Sequence, TypedDict, cast
+from typing import Any, Sequence, TypedDict, cast
 from uuid import uuid4
 
 import requests
