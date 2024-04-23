@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
-from typing import Any, Dict, Sequence, TypedDict, cast
+from typing import Any, Sequence, TypedDict, cast
 from uuid import uuid4
 
 import requests
@@ -45,7 +45,7 @@ def setup(app: Sphinx):
     )
     app.add_config_value("tippy_anchor_parent_selector", "", "html")
 
-    app.add_config_value("tippy_custom_tips", {}, "html", Dict[str, str])
+    app.add_config_value("tippy_custom_tips", {}, "html", (dict,))
     app.add_config_value(
         "tippy_tip_selector",
         "figure, table, img, p, aside, div.admonition, div.literal-block-wrapper",
