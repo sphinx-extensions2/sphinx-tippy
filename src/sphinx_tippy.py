@@ -467,7 +467,7 @@ def _get_header_html(header: Tag | NavigableString, _start: bool = True) -> str:
             continue
         if sibling.name == "section":
             if sub_header := sibling.find(["h1", "h2", "h3", "h4", "h5", "h6"]):
-                output += _get_header_html(sub_header, False)
+                output += _get_header_html(sub_header, True)
             break
         if sibling.name == "p":
             output += str(sibling)
