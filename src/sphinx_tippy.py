@@ -15,6 +15,7 @@ import requests
 from bs4 import BeautifulSoup, NavigableString, Tag
 from docutils import nodes
 from jinja2 import Environment
+from sphinx import __version__ as sphinx_version
 from sphinx.application import Sphinx
 from sphinx.domains.math import MathDomain
 from sphinx.errors import ExtensionError
@@ -27,6 +28,11 @@ except ImportError:
     from sphinx.util import status_iterator
 
 __version__ = "0.4.3"
+
+http_headers = {
+    "User-Agent": f"Sphinx/{sphinx_version} (https://www.sphinx-doc.org/) "
+    f"sphinx-tippy/{__version__} (https://sphinx-tippy.readthedocs.io/en/latest/) ",
+}
 
 
 def setup(app: Sphinx):
@@ -497,7 +503,7 @@ def generate_wikipedia_tooltip(title: str) -> str:
     """Generate a wikipedia tooltip, from a title."""
 
     url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
-    data = requests.get(url).json()
+    data = requests.get(url, headers=http_headers).json()
 
     extract_html = data["extract_html"]
     if "thumbnail" in data:
@@ -565,7 +571,7 @@ def fetch_doi_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str
     for doi in status_iterator(doi_fetch, "Fetching DOI tips", length=len(doi_fetch)):
         url = f"{config.doi_api}{doi}"
         try:
-            data = requests.get(url).json()
+            data = requests.get(url, headers=http_headers).json()
         except Exception as exc:
             LOGGER.warning(
                 f"Could not fetch DOI data for {doi}: {exc} [tippy.doi]",
@@ -608,7 +614,7 @@ def fetch_rtd_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str
         # TODO is this all that needs to be done, to escape the rtd url?
         url = f"https://readthedocs.org/api/v3/embed/?url={rtd.replace('#', '%23')}"
         try:
-            content = requests.get(url).json()["content"]
+            content = requests.get(url, headers=http_headers).json()["content"]
             if content and BeautifulSoup(content, "html.parser").text:
                 rtd_cache[rtd] = content
         except Exception as exc:
