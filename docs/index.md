@@ -211,7 +211,7 @@ tippy_anchor_parent_selector = "article.bd-article"
 These configurations enable fetching tips from external APIs.
 
 :::{confval} tippy_rtd_urls
-A list of URL prefixes to use for ReadTheDocs tooltips (using the [`/api/v3/embed/` API](https://docs.readthedocs.io/en/stable/api/v3.html#embed)), for example:
+A list of URL prefixes to use for ReadTheDocs tooltips (using the [`/api/v3/embed/` API](https://docs.readthedocs.com/platform/stable/api/v3.html#embed)), for example:
 
 ```python
 tippy_rtd_urls = [
