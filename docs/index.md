@@ -173,6 +173,20 @@ tippy_skip_urls = [
 
 :::
 
+:::{confval} tippy_skip_pages
+A list of page names or directories to skip, for example:
+
+```python
+tippy_skip_urls = [
+    "custom_page",
+    "directory/custom_pages/"
+]
+```
+
+:::
+
+
+
 :::{confval} tippy_tip_selector
 Define what elements tips are created for, by default:
 

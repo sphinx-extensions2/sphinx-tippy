@@ -82,9 +82,12 @@ def setup(app: Sphinx):
         [list, tuple],
     )
     app.add_config_value("tippy_add_class", "", "html")
+    app.add_config_value("tippy_skip_pages", (), "html", (list, tuple))
 
     app.connect("builder-inited", compile_config)
-    app.connect("html-page-context", collect_tips, priority=450)  # before mathjax
+    app.connect("doctree-resolved", collect_links_and_id_maps)
+    app.connect("env-merge-info", merge_tippy_data)
+    app.connect("html-page-context", generate_page_js, priority=450)
     app.connect("build-finished", write_tippy_js)
     return {"version": __version__, "parallel_read_safe": True}
 
@@ -233,90 +236,87 @@ def get_tippy_data(app: Sphinx) -> TippyData:
     return cast(TippyData, app.env.tippy_data)  # type: ignore
 
 
-def collect_tips(
-    app: Sphinx,
-    pagename: str,
-    templatename: str,
-    context: dict,
-    doctree: nodes.document,
+def merge_tippy_data(app: Sphinx, env, docnames: set[str], other: Any) -> None:
+    """Merge environment data from a child process into the master process."""
+    if not hasattr(other, "tippy_data"):
+        return
+
+    if not hasattr(env, "tippy_data"):
+        env.tippy_data = {"pages": {}}
+
+    env.tippy_data["pages"].update(other.tippy_data["pages"])
+
+
+def collect_links_and_id_maps(
+    app: Sphinx, doctree: nodes.document, docname: str
 ) -> None:
-    """Add extra variables to the HTML template context."""
+    """Collect links and ID maps from the doctree during the environment reading phase."""
     if not doctree:
         # only process pages with a doctree,
         # i.e. that came from a source document
         return
 
-    page_parent = posixpath.dirname(pagename)
     tippy_config = get_tippy_config(app)
-    custom_tips = tippy_config.custom_tips
+    tippy_data = get_tippy_data(app)
 
-    if tippy_config.enable_mathjax:
-        # TODO ideally we would only run this on pages that have math in the tips
-        domain = cast(MathDomain, app.env.get_domain("math"))
-        domain.data["has_equations"][pagename] = True
-
+    # Calculate ID map (safe to run here)
     element_id_map = create_element_id_map(doctree)
 
-    # load the body HTML
-    body = BeautifulSoup(context["body"], "html.parser")
-
     # Find all href in the document, and determine if they require a tip
-    anchor: Tag
     refs_in_page: set[tuple[None | str, str | None]] = set()
     custom_in_page: set[str] = set()
     wiki_titles: set[str] = set()
     doi_names: set[str] = set()
     rtd_urls: set[str] = set()
-    for anchor in body.find_all("a", {"href": True}):
-        if not isinstance(anchor["href"], str):
-            continue
 
-        if anchor["href"] in custom_tips:
-            custom_in_page.add(anchor["href"])
-            continue
+    # Use standard doctree traversal to find all references (links)
+    for node in doctree.traverse(nodes.reference):
+        # External URI check
+        if "refuri" in node:
+            href = node["refuri"]
 
-        if any(regex.match(anchor["href"]) for regex in tippy_config.skip_url_regexes):
-            continue
-
-        if tippy_config.enable_doitips and anchor["href"].startswith(DOI_PATH):
-            doi_names.add(anchor["href"][len(DOI_PATH) :])
-            continue
-
-        for urls in tippy_config.tippy_rtd_urls:
-            if anchor["href"].startswith(urls):
-                rtd_urls.add(anchor["href"])
+            if href in tippy_config.custom_tips:
+                custom_in_page.add(href)
                 continue
 
-        # split up the href into a path and a target,
-        # e.g. `path/to/file.html#target` -> `path/to/file.html` and `target`
-        href_parts: list[str] = anchor["href"].split("#", maxsplit=1)
-        path: str
-        target: str | None
-        if len(href_parts) == 1:
-            path = href_parts[0]
-            target = None
-        else:
-            path, target = href_parts
-            target = target or None
+            if any(regex.match(href) for regex in tippy_config.skip_url_regexes):
+                continue
 
-        # check if the reference is local to this page
-        if not path:
-            refs_in_page.add((None, target))
-            continue
+            if tippy_config.enable_doitips and href.startswith(DOI_PATH):
+                doi_names.add(href[len(DOI_PATH) :])
+                continue
 
-        if tippy_config.enable_wikitips and path.startswith(WIKI_PATH):
-            wiki_titles.add(path[len(WIKI_PATH) :])
-            continue
+            for urls in tippy_config.tippy_rtd_urls:
+                if href.startswith(urls):
+                    rtd_urls.add(href)
+                    continue
 
-        # check if the reference is on another local page
-        # TODO for now we assume that page names are written in posix style with ".html" prefixes
-        # and that the page name relates to the docname
-        if path.endswith(".html"):
-            other_pagename = posixpath.normpath(posixpath.join(page_parent, path[:-5]))
-            if other_pagename in app.env.all_docs:
-                refs_in_page.add((other_pagename, target))
+            if tippy_config.enable_wikitips and href.startswith(WIKI_PATH):
+                wiki_titles.add(href[len(WIKI_PATH) :])
+                continue
 
-    id_to_tip_html = create_id_to_tip_html(tippy_config, body)
+            # split up the href into a path and a target,
+            # e.g. `path/to/file.html#target` -> `path/to/file.html` and `target`
+            href_parts: list[str] = href.split("#", maxsplit=1)
+            path: str
+            target: str | None
+            if len(href_parts) == 1:
+                path = href_parts[0]
+                target = None
+            else:
+                path, target = href_parts
+                target = target or None
+
+            if path.endswith(".html"):
+                other_docname = posixpath.normpath(
+                    posixpath.join(posixpath.dirname(docname), path[:-5])
+                )
+                if other_docname in app.env.all_docs:
+                    refs_in_page.add((other_docname, target))
+
+        # Internal Document ID check (local anchors)
+        elif "refid" in node:
+            refs_in_page.add((None, node["refid"]))
 
     # create path based on pagename
     # we also add a unique ID to the path,
@@ -324,21 +324,19 @@ def collect_tips(
     # lets also remove any old versions of the file when running rebuilds
     # TODO ideally here, we would just add a query string to the script load
     # see: https://github.com/sphinx-doc/sphinx/issues/11133
-    parts = pagename.split("/")
+    parts = docname.split("/")
     for old_path in Path(app.outdir, "_static", "tippy", *parts).parent.glob(
         f"{parts[0]}.*.js"
     ):
         old_path.unlink()
     js_path = Path(
-        app.outdir, "_static", "tippy", *(pagename + f".{uuid4()}.js").split("/")
+        app.outdir, "_static", "tippy", *(docname + f".{uuid4()}.js").split("/")
     )
 
-    # store the data for later use
-    tippy_data = get_tippy_data(app)
-    tippy_data["pages"][pagename] = {  # type: ignore
+    tippy_data["pages"][docname] = {  # type: ignore
         "element_id_map": element_id_map,
         "refs_in_page": refs_in_page,
-        "id_to_html": id_to_tip_html,
+        "id_to_html": {},
         "custom_in_page": custom_in_page,
         "wiki_titles": wiki_titles,
         "dois": doi_names,
@@ -375,7 +373,7 @@ def create_element_id_map(doctree: nodes.document) -> dict[str, str]:
 
 
 def create_id_to_tip_html(
-    config: TippyConfig, body: BeautifulSoup
+    config: TippyConfig, body: BeautifulSoup | Tag
 ) -> dict[str | None, str]:
     """Create a mapping of ids to the HTML to show in the tooltip."""
     id_to_html: dict[str | None, str] = {}
@@ -391,25 +389,41 @@ def create_id_to_tip_html(
         if "id" in tag.attrs:
             id_to_html[str(tag["id"])] = str(tag)
 
-    # these are tags where we copy the HTML in a bespoke way
+    def next_dd_after(node):
+        """Return the next <dd> after `node`, skipping intervening <dt> tags."""
+        from bs4 import Tag
+
+        sib = node.next_sibling
+        while sib:
+            # Skip non-tags
+            if not isinstance(sib, Tag):
+                sib = sib.next_sibling
+                continue
+
+            if sib.name == "dd":
+                return sib
+
+            if sib.name == "dt":
+                sib = sib.next_sibling
+                continue
+
+            return None
+
+        return None
+
     for tag in body.find_all(id=True):
         if tag.name == "dt":
-            # copy the whole HTML
-            id_to_html[str(tag["id"])] = str(strip_classes(tag.__copy__()))
-            # if the next tag is a dd, copy that too
-            if (next_sibling := next_sibling_tag(tag)) and next_sibling.name == "dd":
-                copy_dd = next_sibling.__copy__()
-                # limit the children to certain numbers and types
-                child_count = 0
-                for child in list(copy_dd.children):
-                    if not isinstance(child, Tag):
-                        child.extract()
-                    elif child_count > 5 or child.name != "p":
-                        child.decompose()
-                    else:
-                        child_count += 1
+            term_id = str(tag["id"])
 
-                id_to_html[str(tag["id"])] += str(copy_dd)
+            dt_copy = tag.__copy__()
+            stripped_dt = strip_classes(dt_copy)
+            id_to_html[term_id] = str(stripped_dt)
+
+            dd = next_dd_after(tag)
+            if dd:
+                dd_copy = dd.__copy__()
+                strip_classes(dd_copy)
+                id_to_html[term_id] += str(dd_copy)
 
         elif tag.name == "section" and (
             header := tag.find(["h1", "h2", "h3", "h4", "h5", "h6"])
@@ -484,13 +498,54 @@ def rewrite_local_attrs(content: str, rel_path: str) -> str:
     """Find all attributes with local links and rewrite them."""
     if not rel_path:
         return content
-    soup = BeautifulSoup(content, "html.parser")
+    soup = BeautifulSoup(content, "lxml")
     for tag, attr in [("a", "href"), ("img", "src")]:
         for element in soup.find_all(tag, {attr: True}):
             if SCHEMA_REGEX.match(element[attr]) or element[attr].startswith("#"):
                 continue
             element[attr] = posixpath.normpath(posixpath.join(rel_path, element[attr]))
     return str(soup)
+
+
+def generate_page_js(
+    app: Sphinx,
+    pagename: str,
+    templatename: str,
+    context: dict,
+    doctree: nodes.document,
+) -> None:
+    """Final step in page generation: parse HTML for tips and inject JS scripts."""
+    if not doctree:
+        return
+    if app.builder.name != "html":
+        return
+
+    skips = app.config.tippy_skip_pages
+    if any(pagename.startswith(prefix.rstrip("/")) for prefix in skips):
+        return
+
+    tippy_config = get_tippy_config(app)
+    tippy_data = get_tippy_data(app)
+
+    if pagename not in tippy_data["pages"]:
+        LOGGER.warning(
+            f"Tippy data not found for page: {pagename}. Skipping JS generation."
+        )
+        return
+
+    page_data = tippy_data["pages"][pagename]
+    page_data["id_to_html"] = {}
+
+    for js_file in tippy_config.js_files:
+        app.add_js_file(js_file, loading_method="defer")
+    app.add_js_file(
+        str(page_data["js_path"].relative_to(Path(app.outdir, "_static"))),
+        loading_method="defer",
+    )
+
+    if tippy_config.enable_mathjax:
+        domain = cast(MathDomain, app.env.get_domain("math"))
+        domain.data["has_equations"][pagename] = True
 
 
 def generate_wikipedia_tooltip(title: str) -> str:
@@ -632,18 +687,46 @@ def write_tippy_js(app: Sphinx, exception: Any):
         return
 
     tippy_page_data = get_tippy_data(app)["pages"]
+    tippy_config = get_tippy_config(app)
 
     wiki_cache = fetch_wikipedia_tips(app, tippy_page_data)
     doi_cache = fetch_doi_tips(app, tippy_page_data)
     rtd_cache = fetch_rtd_tips(app, tippy_page_data)
 
+    skips = app.config.tippy_skip_pages
+
     for pagename in status_iterator(
         tippy_page_data, "Writing tippy data files", length=len(tippy_page_data)
     ):
-        write_tippy_props_page(app, pagename, wiki_cache, doi_cache, rtd_cache)
+        if any(pagename.startswith(prefix.rstrip("/")) for prefix in skips):
+            continue
+
+        data = tippy_page_data[pagename]
+
+        # If id_to_html is missing (i.e., page was not written in this run),
+        # read the generated HTML file and extract the tips now.
+        if not data.get("id_to_html"):
+            html_path = Path(app.outdir) / (pagename + f".{app.builder.name}")
+
+            if html_path.exists():
+                with html_path.open("r", encoding="utf8") as f:
+                    body_html = f.read()
+
+                body = BeautifulSoup(body_html, "lxml")
+                data["id_to_html"] = create_id_to_tip_html(tippy_config, body)
+
+                if not data["id_to_html"]:
+                    LOGGER.warning(
+                        f"Could not extract local HTML tips from rendered file for: {pagename}. JS file will be empty.",
+                        type="tippy",
+                        subtype="render",
+                    )
+                    continue
+
+        write_tippy_props_file(app, pagename, wiki_cache, doi_cache, rtd_cache)
 
 
-def write_tippy_props_page(
+def write_tippy_props_file(
     app: Sphinx,
     pagename: str,
     wiki_cache: dict[str, str],
@@ -684,17 +767,38 @@ def write_tippy_props_page(
                 selector_to_html[f'a[href="{relpage}.html"]'] = rewrite_local_attrs(
                     tippy_page_data[refpage]["id_to_html"][None], relfolder
                 )
-            elif (
-                target
-                and target in tippy_page_data[refpage]["element_id_map"]
-                and tippy_page_data[refpage]["element_id_map"][target]
-                in tippy_page_data[refpage]["id_to_html"]
-            ):
+            elif target and target in tippy_page_data[refpage]["element_id_map"]:
+                if (
+                    tippy_page_data[refpage]["element_id_map"][target]
+                    not in tippy_page_data[refpage]["id_to_html"]
+                ):
+
+                    html_path = Path(app.outdir) / f"{refpage}.html"
+
+                    if html_path.exists():
+                        with html_path.open("r", encoding="utf8") as f:
+                            body_html = f.read()
+
+                            body = BeautifulSoup(body_html, "lxml")
+                            tippy_page_data[refpage]["id_to_html"] = (
+                                create_id_to_tip_html(tippy_config, body)
+                            )
+
+                        if not tippy_page_data[refpage]["id_to_html"]:
+                            LOGGER.warning(
+                                f"Could not extract local HTML tips from rendered file for: {refpage}.",
+                                type="tippy",
+                                subtype="render",
+                            )
+                            continue
+
                 html_str = tippy_page_data[refpage]["id_to_html"][
                     tippy_page_data[refpage]["element_id_map"][target]
                 ]
                 html_str = rewrite_local_attrs(html_str, relfolder)
-                selector_to_html[f'a[href="{relpage}.html#{target}"]'] = html_str
+
+                selector_to_html[f'a[href$="#{target}"]'] = html_str
+                selector_to_html[f'a[href*="#{target}"]'] = html_str
         elif target is None:
             selector_to_html['a[href="#"]'] = local_id_to_html[None]
         elif target in local_id_map and local_id_map[target] in local_id_to_html:
