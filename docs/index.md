@@ -258,6 +258,25 @@ The [jinja template](https://jinja.palletsprojects.com) to use for formatting DO
 
 ### Miscellaneous
 
+:::{confval} tippy_glossary_base_url
+The base URL for glossary term links within tooltips. This fixes broken
+links when using `:term:` references within glossary term definitions.
+
+When a glossary term definition contains references to other terms (e.g.,
+`:term:`Other Term``), those links use relative anchors like
+`#term-Other-Term`. Without this configuration, clicking such links in
+tooltips will try to navigate to the anchor on the current page instead
+of the glossary page.
+
+For example, if your glossary is in `glossary.rst`:
+
+```python
+tippy_glossary_base_url = "glossary.html"
+```
+
+This will rewrite tooltip links from `#term-Something` to `glossary.html#term-Something`.
+:::
+
 :::{confval} tippy_custom_tips
 A dictionary, mapping URLs to HTML strings, which will be used to create custom tips.
 

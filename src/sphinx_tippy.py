@@ -82,6 +82,7 @@ def setup(app: Sphinx):
         [list, tuple],
     )
     app.add_config_value("tippy_add_class", "", "html")
+    app.add_config_value("tippy_glossary_base_url", "", "html")
 
     app.connect("builder-inited", compile_config)
     app.connect("html-page-context", collect_tips, priority=450)  # before mathjax
@@ -108,6 +109,7 @@ class TippyConfig:
     doi_api: str
     js_files: tuple[str, ...]
     tippy_add_class: str
+    glossary_base_url: str
 
 
 def get_tippy_config(app: Sphinx) -> TippyConfig:
@@ -197,12 +199,12 @@ def compile_config(app: Sphinx):
         doi_api=app.config.tippy_doi_api,
         js_files=app.config.tippy_js,
         tippy_add_class=app.config.tippy_add_class,
+        glossary_base_url=app.config.tippy_glossary_base_url,
     )
     if app.builder.name != "html":
         return
     if (
-        app.config.tippy_enable_mathjax
-        and app.builder.math_renderer_name != "mathjax"  # type: ignore[attr-defined]
+        app.config.tippy_enable_mathjax and app.builder.math_renderer_name != "mathjax"  # type: ignore[attr-defined]
     ):
         raise ExtensionError("tippy_enable_mathjax=True requires mathjax to be enabled")
 
@@ -478,6 +480,31 @@ def _get_header_html(header: Tag | NavigableString, _start: bool = True) -> str:
 
 
 SCHEMA_REGEX = re.compile(r"^[a-zA-Z][a-zA-Z0-9+.-]*:")
+GLOSSARY_TERM_REGEX = re.compile(r"^#term-")
+
+
+def rewrite_glossary_term_links(content: str, glossary_base_url: str) -> str:
+    """Rewrite glossary term anchor links to use the glossary base URL.
+
+    When tooltip content contains relative links like #term-Something,
+    they need to be rewritten to point to the glossary page instead of
+    the current page.
+
+    Args:
+        content: The HTML content of the tooltip.
+        glossary_base_url: The base URL for glossary terms (e.g., "glossary.html").
+
+    Returns:
+        The HTML content with glossary term links rewritten.
+    """
+    if not glossary_base_url:
+        return content
+    soup = BeautifulSoup(content, "html.parser")
+    for anchor in soup.find_all("a", {"href": True}):
+        href = anchor.get("href", "")
+        if isinstance(href, str) and GLOSSARY_TERM_REGEX.match(href):
+            anchor["href"] = glossary_base_url + href
+    return str(soup)
 
 
 def rewrite_local_attrs(content: str, rel_path: str) -> str:
@@ -694,13 +721,18 @@ def write_tippy_props_page(
                     tippy_page_data[refpage]["element_id_map"][target]
                 ]
                 html_str = rewrite_local_attrs(html_str, relfolder)
+                html_str = rewrite_glossary_term_links(
+                    html_str, tippy_config.glossary_base_url
+                )
                 selector_to_html[f'a[href="{relpage}.html#{target}"]'] = html_str
         elif target is None:
             selector_to_html['a[href="#"]'] = local_id_to_html[None]
         elif target in local_id_map and local_id_map[target] in local_id_to_html:
-            selector_to_html[f'a[href="#{target}"]'] = local_id_to_html[
-                local_id_map[target]
-            ]
+            html_str = local_id_to_html[local_id_map[target]]
+            html_str = rewrite_glossary_term_links(
+                html_str, tippy_config.glossary_base_url
+            )
+            selector_to_html[f'a[href="#{target}"]'] = html_str
 
     # custom tips take priority over other tips
     selector_to_html.update(
@@ -713,11 +745,9 @@ def write_tippy_props_page(
     pselector = tippy_config.anchor_parent_selector
     mathjax = (
         (
-            "onShow(instance) "
-            "{MathJax.typesetPromise([instance.popper]).then(() => {});},"
+            "onShow(instance) {MathJax.typesetPromise([instance.popper]).then(() => {});},"
         )
-        if tippy_config.enable_mathjax
-        and app.builder.math_renderer_name == "mathjax"  # type: ignore[attr-defined]
+        if tippy_config.enable_mathjax and app.builder.math_renderer_name == "mathjax"  # type: ignore[attr-defined]
         else ""
     )
     # TODO need to only enable when math,
