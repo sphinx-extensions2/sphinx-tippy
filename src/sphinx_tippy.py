@@ -85,8 +85,16 @@ def setup(app: Sphinx):
 
     app.connect("builder-inited", compile_config)
     app.connect("html-page-context", collect_tips, priority=450)  # before mathjax
+    app.connect("env-merge-info", merge_tippy_data)
     app.connect("build-finished", write_tippy_js)
-    return {"version": __version__, "parallel_read_safe": True}
+    # parallel_write_safe must be False because collect_tips stores data during
+    # html-page-context which runs in parallel workers during the write phase.
+    # This data won't be available in the main process for write_tippy_js.
+    return {
+        "version": __version__,
+        "parallel_read_safe": True,
+        "parallel_write_safe": False,
+    }
 
 
 LOGGER = getLogger(__name__)
@@ -201,8 +209,7 @@ def compile_config(app: Sphinx):
     if app.builder.name != "html":
         return
     if (
-        app.config.tippy_enable_mathjax
-        and app.builder.math_renderer_name != "mathjax"  # type: ignore[attr-defined]
+        app.config.tippy_enable_mathjax and app.builder.math_renderer_name != "mathjax"  # type: ignore[attr-defined]
     ):
         raise ExtensionError("tippy_enable_mathjax=True requires mathjax to be enabled")
 
@@ -231,6 +238,18 @@ def get_tippy_data(app: Sphinx) -> TippyData:
     if not hasattr(app.env, "tippy_data"):
         app.env.tippy_data = {"pages": {}, "wiki_titles": set()}  # type: ignore
     return cast(TippyData, app.env.tippy_data)  # type: ignore
+
+
+def merge_tippy_data(app: Sphinx, env, docnames, other) -> None:
+    """Merge tippy data from parallel workers.
+
+    When Sphinx runs in parallel mode, each worker process has its own
+    environment. This function merges the tippy data from worker processes
+    back into the main process.
+    """
+    tippy_data = get_tippy_data(app)
+    other_data = getattr(other, "tippy_data", {})
+    tippy_data["pages"].update(other_data.get("pages", {}))
 
 
 def collect_tips(
@@ -713,11 +732,9 @@ def write_tippy_props_page(
     pselector = tippy_config.anchor_parent_selector
     mathjax = (
         (
-            "onShow(instance) "
-            "{MathJax.typesetPromise([instance.popper]).then(() => {});},"
+            "onShow(instance) {MathJax.typesetPromise([instance.popper]).then(() => {});},"
         )
-        if tippy_config.enable_mathjax
-        and app.builder.math_renderer_name == "mathjax"  # type: ignore[attr-defined]
+        if tippy_config.enable_mathjax and app.builder.math_renderer_name == "mathjax"  # type: ignore[attr-defined]
         else ""
     )
     # TODO need to only enable when math,
