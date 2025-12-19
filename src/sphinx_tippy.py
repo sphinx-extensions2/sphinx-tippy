@@ -131,7 +131,9 @@ def compile_config(app: Sphinx):
     updates = app.config.tippy_props or {}
     if not isinstance(updates, dict):
         raise ExtensionError(f"tippy_props must be a dictionary, not a {type(updates)}")
-    props = dict({"placement": "auto-start", "maxWidth": 500, "interactive": False}, **updates)
+    props = dict(
+        {"placement": "auto-start", "maxWidth": 500, "interactive": False}, **updates
+    )
 
     supported_properties = {
         "placement",
@@ -164,11 +166,15 @@ def compile_config(app: Sphinx):
         "left-end",
     }
     if props["placement"] not in allowed_placements:
-        raise ExtensionError(f"tippy_props['placement'] must one of {allowed_placements}")
+        raise ExtensionError(
+            f"tippy_props['placement'] must one of {allowed_placements}"
+        )
     props["placement"] = f"'{props['placement']}'"
     if not (props["maxWidth"] is None or isinstance(props["maxWidth"], int)):
         raise ExtensionError("tippy_props['maxWidth'] must be an integer or None")
-    props["maxWidth"] = "'none'" if props["maxWidth"] is None else str(props["maxWidth"])
+    props["maxWidth"] = (
+        "'none'" if props["maxWidth"] is None else str(props["maxWidth"])
+    )
     if not isinstance(props["interactive"], bool):
         raise ExtensionError("tippy_props['interactive'] must be a boolean")
     props["interactive"] = "true" if props["interactive"] else "false"
@@ -338,9 +344,13 @@ def collect_tips(
     # TODO ideally here, we would just add a query string to the script load
     # see: https://github.com/sphinx-doc/sphinx/issues/11133
     parts = pagename.split("/")
-    for old_path in Path(app.outdir, "_static", "tippy", *parts).parent.glob(f"{parts[0]}.*.js"):
+    for old_path in Path(app.outdir, "_static", "tippy", *parts).parent.glob(
+        f"{parts[0]}.*.js"
+    ):
         old_path.unlink()
-    js_path = Path(app.outdir, "_static", "tippy", *(pagename + f".{uuid4()}.js").split("/"))
+    js_path = Path(
+        app.outdir, "_static", "tippy", *(pagename + f".{uuid4()}.js").split("/")
+    )
 
     # store the data for later use
     tippy_data = get_tippy_data(app)
@@ -358,7 +368,9 @@ def collect_tips(
     # add the JS files
     for js_file in tippy_config.js_files:
         app.add_js_file(js_file, loading_method="defer")
-    app.add_js_file(str(js_path.relative_to(Path(app.outdir, "_static"))), loading_method="defer")
+    app.add_js_file(
+        str(js_path.relative_to(Path(app.outdir, "_static"))), loading_method="defer"
+    )
 
 
 def create_element_id_map(doctree: nodes.document) -> dict[str, str]:
@@ -381,7 +393,9 @@ def create_element_id_map(doctree: nodes.document) -> dict[str, str]:
     return id_map
 
 
-def create_id_to_tip_html(config: TippyConfig, body: BeautifulSoup) -> dict[str | None, str]:
+def create_id_to_tip_html(
+    config: TippyConfig, body: BeautifulSoup
+) -> dict[str | None, str]:
     """Create a mapping of ids to the HTML to show in the tooltip."""
     id_to_html: dict[str | None, str] = {}
 
@@ -416,7 +430,9 @@ def create_id_to_tip_html(config: TippyConfig, body: BeautifulSoup) -> dict[str 
 
                 id_to_html[str(tag["id"])] += str(copy_dd)
 
-        elif tag.name == "section" and (header := tag.find(["h1", "h2", "h3", "h4", "h5", "h6"])):
+        elif tag.name == "section" and (
+            header := tag.find(["h1", "h2", "h3", "h4", "h5", "h6"])
+        ):
             id_to_html[str(tag["id"])] = _get_header_html(header)
 
         elif tag.name == "div" and (
@@ -507,7 +523,9 @@ def generate_wikipedia_tooltip(title: str) -> str:
         thumbnail_url = data["thumbnail"]["source"]
         style = "float:left; margin-right:10px;"
         alt = "Wikipedia thumbnail"
-        extract_html = f'<img src="{thumbnail_url}" alt="{alt}" style="{style}">' + extract_html
+        extract_html = (
+            f'<img src="{thumbnail_url}" alt="{alt}" style="{style}">' + extract_html
+        )
 
     return extract_html
 
@@ -522,9 +540,14 @@ def fetch_wikipedia_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[st
     else:
         wiki_cache = {}
     wiki_fetch = {
-        title for page in data.values() for title in page["wiki_titles"] if title not in wiki_cache
+        title
+        for page in data.values()
+        for title in page["wiki_titles"]
+        if title not in wiki_cache
     }
-    for title in status_iterator(wiki_fetch, "Fetching Wikipedia tips", length=len(wiki_fetch)):
+    for title in status_iterator(
+        wiki_fetch, "Fetching Wikipedia tips", length=len(wiki_fetch)
+    ):
         try:
             wiki_cache[title] = generate_wikipedia_tooltip(title)
         except Exception as exc:
@@ -555,7 +578,9 @@ def fetch_doi_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str
             doi_cache = json.load(file)
     else:
         doi_cache = {}
-    doi_fetch = {doi for page in data.values() for doi in page["dois"] if doi not in doi_cache}
+    doi_fetch = {
+        doi for page in data.values() for doi in page["dois"] if doi not in doi_cache
+    }
     for doi in status_iterator(doi_fetch, "Fetching DOI tips", length=len(doi_fetch)):
         url = f"{config.doi_api}{doi}"
         try:
@@ -591,7 +616,12 @@ def fetch_rtd_tips(app: Sphinx, data: dict[str, TippyPageData]) -> dict[str, str
             rtd_cache = json.load(file)
     else:
         rtd_cache = {}
-    rtd_fetch = {rtd for page in data.values() for rtd in page["rtd_urls"] if rtd not in rtd_cache}
+    rtd_fetch = {
+        rtd
+        for page in data.values()
+        for rtd in page["rtd_urls"]
+        if rtd not in rtd_cache
+    }
     for rtd in status_iterator(rtd_fetch, "Fetching RTD tips", length=len(rtd_fetch)):
         # see https://docs.readthedocs.io/en/stable/api/v3.html#embed
         # TODO is this all that needs to be done, to escape the rtd url?
@@ -649,8 +679,12 @@ def write_tippy_props_page(
     selector_to_html: dict[str, str] = {}
     for wiki_title in data["wiki_titles"]:
         if wiki_title in wiki_cache:
-            selector_to_html[f'a[href="{WIKI_PATH}{wiki_title}"]'] = wiki_cache[wiki_title]
-            selector_to_html[f'a[href^="{WIKI_PATH}{wiki_title}#"]'] = wiki_cache[wiki_title]
+            selector_to_html[f'a[href="{WIKI_PATH}{wiki_title}"]'] = wiki_cache[
+                wiki_title
+            ]
+            selector_to_html[f'a[href^="{WIKI_PATH}{wiki_title}#"]'] = wiki_cache[
+                wiki_title
+            ]
     for doi in data["dois"]:
         if doi in doi_cache:
             selector_to_html[f'a[href="{DOI_PATH}{doi}"]'] = doi_cache[doi]
@@ -659,7 +693,9 @@ def write_tippy_props_page(
             selector_to_html[f'a[href="{rtd}"]'] = rtd_cache[rtd]
     for refpage, target in data["refs_in_page"]:
         if refpage is not None:
-            relpage = posixpath.normpath(posixpath.relpath(refpage, posixpath.dirname(pagename)))
+            relpage = posixpath.normpath(
+                posixpath.relpath(refpage, posixpath.dirname(pagename))
+            )
             relfolder = posixpath.dirname(relpage)
             if refpage not in tippy_page_data:
                 pass
@@ -681,16 +717,23 @@ def write_tippy_props_page(
         elif target is None:
             selector_to_html['a[href="#"]'] = local_id_to_html[None]
         elif target in local_id_map and local_id_map[target] in local_id_to_html:
-            selector_to_html[f'a[href="#{target}"]'] = local_id_to_html[local_id_map[target]]
+            selector_to_html[f'a[href="#{target}"]'] = local_id_to_html[
+                local_id_map[target]
+            ]
 
     # custom tips take priority over other tips
     selector_to_html.update(
-        {f'a[href="{ref}"]': tippy_config.custom_tips[ref] for ref in data["custom_in_page"]}
+        {
+            f'a[href="{ref}"]': tippy_config.custom_tips[ref]
+            for ref in data["custom_in_page"]
+        }
     )
 
     pselector = tippy_config.anchor_parent_selector
     mathjax = (
-        ("onShow(instance) {MathJax.typesetPromise([instance.popper]).then(() => {});},")
+        (
+            "onShow(instance) {MathJax.typesetPromise([instance.popper]).then(() => {});},"
+        )
         if tippy_config.enable_mathjax and app.builder.math_renderer_name == "mathjax"  # type: ignore[attr-defined]
         else ""
     )
