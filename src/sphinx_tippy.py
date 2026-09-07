@@ -60,8 +60,7 @@ def setup(app: Sphinx):
     # or for https://api.datacite.org/dois/
     # see https://support.datacite.org/docs/api-get-doi
     # and http://schema.datacite.org/meta/kernel-4.4/metadata.xsd
-    default_doi_template = dedent(
-        """\
+    default_doi_template = dedent("""\
         {% set attrs = data.message %}
         <div>
             <h3>{{ attrs.title[0] }}</h3>
@@ -71,8 +70,7 @@ def setup(app: Sphinx):
             <p><b>Publisher:</b> {{ attrs.publisher }}</p>
             <p><b>Published:</b> {{ attrs.created['date-parts'][0] | join('-') }}</p>
         </div>
-        """
-    )
+        """)
     app.add_config_value("tippy_doi_template", default_doi_template, "html")
     app.add_config_value("tippy_enable_mathjax", False, "html")
     app.add_config_value(
@@ -727,9 +725,7 @@ def write_tippy_props_page(
     if tippy_config.tippy_add_class:
         tippy_add_class = f"link.classList.add({tippy_config.tippy_add_class!r});"
     tippy_props = ", ".join(f"{k}: {v}" for k, v in tippy_config.props.items())
-    content = (
-        dedent(
-            f"""\
+    content = dedent(f"""\
         selector_to_html = {json.dumps(selector_to_html)}
         skip_classes = {json.dumps(tippy_config.skip_anchor_classes)}
 
@@ -752,11 +748,7 @@ def write_tippy_props_page(
             }};
             console.log("tippy tips loaded!");
         }};
-        """
-        )
-        if selector_to_html
-        else ""
-    )
+        """) if selector_to_html else ""
 
     data["js_path"].parent.mkdir(parents=True, exist_ok=True)
     with data["js_path"].open("w", encoding="utf8") as handle:
