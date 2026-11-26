@@ -152,3 +152,4 @@ cython_debug/
 #.idea/
 
 .vscode/
+src/_version.py

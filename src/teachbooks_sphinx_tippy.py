@@ -794,7 +794,7 @@ def write_tippy_props_page(
     katex = (
         (
             "onShow(instance) "
-            "{renderMathInElement(instance.popper)}"
+            "{renderMathInElement(instance.popper, window.katex_options)}"
         )
         if tippy_config.enable_mathjax
         and app.builder.math_renderer_name == "katex"  # type: ignore[attr-defined]
